@@ -1,0 +1,5 @@
+export enum StatusDistEnum {
+  //PENDENTE = 'PENDENTE',
+  AUTORIZADA = 'AUTORIZADA',
+  HOMOLOGADA = 'HOMOLOGADA',
+}
