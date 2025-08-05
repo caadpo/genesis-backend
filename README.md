@@ -73,10 +73,6 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 Nest is [MIT licensed](LICENSE).
 
 
-Linha removida do package.json : "start:dev": "ts-node -r dotenv/config -r tsconfig-paths/register src/main.ts",
-
-
-
 EXECUTAR ISSO APOS GERAR AS MIGRATION NO BANCO PARA O ID DO NOVO USUARIO SER GERADO MESMO COM USUARIOS JA CRIADOS
 SELECT setval('user_id_seq', (SELECT MAX(id) FROM public."user"));
 
