@@ -23,7 +23,7 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new Utf8Interceptor());
 
-  await app.listen(8081);
+  await app.listen(8081, '0.0.0.0');
 }
 
 bootstrap();
