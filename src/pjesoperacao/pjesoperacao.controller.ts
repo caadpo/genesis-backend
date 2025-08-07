@@ -74,14 +74,7 @@ export class PjesOperacaoController {
     return this.pjesOperacaoService.findOne(id);
   }
 
-  @Roles(
-    UserType.Master,
-    UserType.Tecnico,
-    UserType.Superintendente,
-    UserType.Diretor,
-    UserType.Auxiliar,
-    UserType.Comum,
-  )
+ 
   @Get('by-codop')
   async findByCodOp(
   @Query('codOp') codOp: string,
