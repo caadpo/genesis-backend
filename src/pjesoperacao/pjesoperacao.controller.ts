@@ -81,7 +81,7 @@ export class PjesOperacaoController {
     UserType.Auxiliar,
     UserType.Comum,
   )
-  @Get('by-codop/:codOp')
+  @Get('by-codop')
   async findByCodOp(
     @Param('codOp') codOp: string,
   ): Promise<ReturnPjesOperacaoDto> {
