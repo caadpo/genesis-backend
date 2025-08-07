@@ -5,9 +5,7 @@ import { Utf8Interceptor } from './utils/utf8.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
-  app.setGlobalPrefix('api'); 
-
+  
   app.enableCors({
     origin: [
       'http://localhost:3000',
