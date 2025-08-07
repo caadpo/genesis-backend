@@ -11,11 +11,11 @@ import { LoginDto } from './dtos/login.dto';
 import { ReturnLogin } from './dtos/returnLogin.dto';
 import { Public } from 'src/decorators/public.decorator';
 
-@Controller('api/auth')
+@Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Public() //SERVE PARA QUE O JwtAuthGuard e RolesGuard GLOBAL NÃO EXIJA AUTENTICAÇÃO NESSA ROTA
+  @Public()
   @UsePipes(ValidationPipe)
   @Post()
   async login(
