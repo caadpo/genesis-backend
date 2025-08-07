@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   Put,
   Delete,
   ParseIntPipe,
@@ -83,10 +84,10 @@ export class PjesOperacaoController {
   )
   @Get('by-codop')
   async findByCodOp(
-    @Param('codOp') codOp: string,
-  ): Promise<ReturnPjesOperacaoDto> {
-    return this.pjesOperacaoService.findByCodOp(codOp);
-  }
+  @Query('codOp') codOp: string,
+): Promise<ReturnPjesOperacaoDto> {
+  return this.pjesOperacaoService.findByCodOp(codOp);
+}
 
   @Roles(
     UserType.Master,
