@@ -86,6 +86,7 @@ export class PjesOperacaoController {
   async findByCodOp(
   @Query('codOp') codOp: string,
 ): Promise<ReturnPjesOperacaoDto> {
+  console.log('Recebido codOp:', codOp);
   return this.pjesOperacaoService.findByCodOp(codOp);
 }
 
