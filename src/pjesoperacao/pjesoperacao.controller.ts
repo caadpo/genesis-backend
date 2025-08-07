@@ -81,12 +81,13 @@ export class PjesOperacaoController {
     UserType.Auxiliar,
     UserType.Comum,
   )
-  @Get('by-codop/:codOp(*)')
-  async findByCodOp(
-    @Param('codOp') codOp: string,
-  ): Promise<ReturnPjesOperacaoDto> {
-    return this.pjesOperacaoService.findByCodOp(codOp);
-  }
+  @Get('by-codop/:codOp*')
+async findByCodOp(
+  @Param('codOp') codOp: string | string[],
+): Promise<ReturnPjesOperacaoDto> {
+  const codOpStr = Array.isArray(codOp) ? codOp.join('/') : codOp;
+  return this.pjesOperacaoService.findByCodOp(codOpStr);
+}
 
   @Roles(
     UserType.Master,
