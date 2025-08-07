@@ -4,7 +4,6 @@ import {
   Post,
   Body,
   Param,
-  Query,
   Put,
   Delete,
   ParseIntPipe,
@@ -24,7 +23,6 @@ import { Roles } from 'src/decorators/roles.decorator';
 import { UserType } from 'src/user/enum/user-type.enum';
 
 import { Response } from 'express';
-import { BuscarOperacaoDto } from './dtos/buscar-operacao.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('pjesoperacao')
@@ -83,11 +81,10 @@ export class PjesOperacaoController {
     UserType.Auxiliar,
     UserType.Comum,
   )
-  @Get('by-codop')
+  @Get('by-codop/:codOp')
   async findByCodOp(
-    @Query() query: BuscarOperacaoDto,
+    @Param('codOp') codOp: string,
   ): Promise<ReturnPjesOperacaoDto> {
-    const { codOp } = query;
     return this.pjesOperacaoService.findByCodOp(codOp);
   }
 
