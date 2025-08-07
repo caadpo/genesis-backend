@@ -24,6 +24,7 @@ import { Roles } from 'src/decorators/roles.decorator';
 import { UserType } from 'src/user/enum/user-type.enum';
 
 import { Response } from 'express';
+import { BuscarOperacaoDto } from './dtos/buscar-operacao.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('pjesoperacao')
@@ -74,14 +75,21 @@ export class PjesOperacaoController {
     return this.pjesOperacaoService.findOne(id);
   }
 
- 
+  @Roles(
+    UserType.Master,
+    UserType.Tecnico,
+    UserType.Superintendente,
+    UserType.Diretor,
+    UserType.Auxiliar,
+    UserType.Comum,
+  )
   @Get('by-codop')
   async findByCodOp(
-  @Query('codOp') codOp: string,
-): Promise<ReturnPjesOperacaoDto> {
-  console.log('Recebido codOp:', codOp);
-  return this.pjesOperacaoService.findByCodOp(codOp);
-}
+    @Query() query: BuscarOperacaoDto,
+  ): Promise<ReturnPjesOperacaoDto> {
+    const { codOp } = query;
+    return this.pjesOperacaoService.findByCodOp(codOp);
+  }
 
   @Roles(
     UserType.Master,
