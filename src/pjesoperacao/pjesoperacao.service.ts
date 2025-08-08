@@ -32,7 +32,7 @@ export class PjesOperacaoService {
 
     while (exists) {
       const prefixo = Math.floor(10000 + Math.random() * 90000);
-      codOp = `${prefixo}/${sufixo}`;
+      codOp = `${prefixo}${sufixo}`;
       const found = await this.pjesOperacaoRepository.findOne({
         where: { CodOp: codOp },
       });
