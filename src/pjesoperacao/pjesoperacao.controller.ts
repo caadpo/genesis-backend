@@ -54,6 +54,19 @@ export class PjesOperacaoController {
     UserType.Auxiliar,
     UserType.Comum,
   )
+  @Get('by-codop')
+  async findByCodOp(@Query('codOp') codOp: string): Promise<ReturnPjesOperacaoDto> {
+   return this.pjesOperacaoService.findByCodOp(codOp);
+  }
+
+  @Roles(
+    UserType.Master,
+    UserType.Tecnico,
+    UserType.Superintendente,
+    UserType.Diretor,
+    UserType.Auxiliar,
+    UserType.Comum,
+  )
   @Get()
   async findAll(): Promise<ReturnPjesOperacaoDto[]> {
     return this.pjesOperacaoService.findAll();
@@ -72,19 +85,6 @@ export class PjesOperacaoController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<ReturnPjesOperacaoDto> {
     return this.pjesOperacaoService.findOne(id);
-  }
-
-  @Roles(
-    UserType.Master,
-    UserType.Tecnico,
-    UserType.Superintendente,
-    UserType.Diretor,
-    UserType.Auxiliar,
-    UserType.Comum,
-  )
-  @Get('by-codop')
-  async findByCodOp(@Query('codOp') codOp: string): Promise<ReturnPjesOperacaoDto> {
-   return this.pjesOperacaoService.findByCodOp(codOp);
   }
 
   @Roles(
