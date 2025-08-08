@@ -1,14 +1,16 @@
+// src/auth/auth.controller.ts
 import {
   Body,
   Controller,
   Post,
-  Request,
+  Req,
+  Res,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dtos/login.dto';
-import { ReturnLogin } from './dtos/returnLogin.dto';
+import { Response, Request } from 'express';
 import { Public } from 'src/decorators/public.decorator';
 
 @Controller('auth')
@@ -20,10 +22,19 @@ export class AuthController {
   @Post()
   async login(
     @Body() loginDto: LoginDto,
-    @Request() req: any,
-  ): Promise<ReturnLogin> {
-    const user = req.user;
-    console.log('Os dados do usaurio são: ', user);
-    return this.authService.login(loginDto);
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const loginResult = await this.authService.login(loginDto);
+
+    // Define o cookie com o accessToken (HTTP-only e com expiração correta)
+    res.cookie('accessToken', loginResult.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60, // 1h em milissegundos
+    });
+
+    // Retorna apenas os dados do usuário
+    return { user: loginResult.user };
   }
 }
