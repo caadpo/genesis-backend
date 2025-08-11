@@ -176,9 +176,7 @@ export class PjesOperacaoService {
   
     return new ReturnPjesOperacaoDto(operacao);
   }
-  
-  
-
+    
   async remove(id: number, user: LoginPayload): Promise<void> {
     const operation = await this.pjesOperacaoRepository.findOne({
       where: { id },
@@ -630,7 +628,21 @@ export class PjesOperacaoService {
     doc.font('Times-Roman');
 
     const registrosPorPagina = 15;
-    const escalas = operacaoDto.pjesescalas || [];
+    const funcaoOrdem: Record<string, number> = { FISCAL: 1, MOT: 2, PAT: 3 };
+
+    const escalas = (operacaoDto.pjesescalas || []).slice().sort((a, b) => {
+      const dataA = new Date(`${a.dataInicio}T${a.horaInicio?.slice(0, 5) || '00:00'}`);
+      const dataB = new Date(`${b.dataInicio}T${b.horaInicio?.slice(0, 5) || '00:00'}`);
+
+      const compareDate = dataA.getTime() - dataB.getTime();
+      if (compareDate !== 0) return compareDate;
+
+      const funcaoA = funcaoOrdem[a.funcao?.toUpperCase()] || 99;
+      const funcaoB = funcaoOrdem[b.funcao?.toUpperCase()] || 99;
+
+      return funcaoA - funcaoB;
+    });
+
     const startTableY = 170;
 
     addFooter();
