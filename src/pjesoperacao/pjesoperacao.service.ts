@@ -629,25 +629,28 @@ export class PjesOperacaoService {
 
     const registrosPorPagina = 15;
 
-    const funcaoOrdem: Record<string, number> = { FISCAL: 1, MOT: 2, PAT: 3 };
-
     const escalas = (operacaoDto.pjesescalas || []).slice().sort((a, b) => {
-      const dataA = new Date(a.dataInicio);
-      dataA.setHours(Number(a.horaInicio?.split(':')[0] || 0));
-      dataA.setMinutes(Number(a.horaInicio?.split(':')[1] || 0));
-
-      const dataB = new Date(b.dataInicio);
-      dataB.setHours(Number(b.horaInicio?.split(':')[0] || 0));
-      dataB.setMinutes(Number(b.horaInicio?.split(':')[1] || 0));
-
-      const compareDate = dataA.getTime() - dataB.getTime();
+      const horaInicioA = a.horaInicio?.slice(0, 5) || '00:00';
+      const horaInicioB = b.horaInicio?.slice(0, 5) || '00:00';
+    
+      const dataTimeA = new Date(
+        `${a.dataInicio.toISOString().split('T')[0]}T${horaInicioA}:00`
+      );
+      const dataTimeB = new Date(
+        `${b.dataInicio.toISOString().split('T')[0]}T${horaInicioB}:00`
+      );
+    
+      const compareDate = dataTimeA.getTime() - dataTimeB.getTime();
       if (compareDate !== 0) return compareDate;
-
+    
+      const funcaoOrdem: Record<string, number> = { FISCAL: 1, MOT: 2, PAT: 3 };
+    
       const funcaoA = funcaoOrdem[a.funcao?.toUpperCase()] || 99;
       const funcaoB = funcaoOrdem[b.funcao?.toUpperCase()] || 99;
-
+    
       return funcaoA - funcaoB;
     });
+    
 
 
     const startTableY = 170;
@@ -788,6 +791,14 @@ export class PjesOperacaoService {
 
       currentY += rowHeight;
     }
+
+    console.table(escalas.map((e, i) => ({
+      i: i + 1,
+      data: e.dataInicio.toISOString().split('T')[0],
+      hora: e.horaInicio,
+      funcao: e.funcao
+    })));
+    
     doc.end();
   }
 }
