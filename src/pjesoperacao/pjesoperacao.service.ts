@@ -139,20 +139,18 @@ export class PjesOperacaoService {
   }
 
   async findByCodOp(CodOp: string): Promise<ReturnPjesOperacaoDto> {
-    const operacao = await this.pjesOperacaoRepository
-      .createQueryBuilder('operacao')
-      .leftJoinAndSelect('operacao.pjesescalas', 'pjesescalas')
-      .leftJoinAndSelect('pjesescalas.comentarios', 'comentarios')
-      .leftJoinAndSelect('comentarios.autor', 'autor')
-      .leftJoinAndSelect('autor.ome', 'autorOme')
-      .leftJoinAndSelect('operacao.pjesevento', 'pjesevento')
-      .leftJoinAndSelect('operacao.ome', 'ome')
-      .leftJoinAndSelect('pjesescalas.statusLogs', 'statusLogs')
-      .where('operacao.CodOp = :codOp', { codOp: CodOp })
-      .orderBy('pjesescalas.data_inicio', 'ASC')
-      .addOrderBy('pjesescalas.hora_inicio', 'ASC')
-      .addOrderBy('pjesescalas.funcao', 'ASC')
-      .getOne();
+    const operacao = await this.pjesOperacaoRepository.findOne({
+      where: { CodOp },
+      relations: [
+        'pjesescalas',
+        'pjesescalas.comentarios',
+        'pjesescalas.comentarios.autor',
+        'pjesescalas.comentarios.autor.ome',
+        'pjesevento',
+        'ome',
+        'pjesescalas.statusLogs',
+      ],
+    });
   
     if (!operacao) {
       throw new NotFoundException(
@@ -160,8 +158,25 @@ export class PjesOperacaoService {
       );
     }
   
+    // Ordenar manualmente pjesescalas
+    operacao.pjesescalas = operacao.pjesescalas.sort((a, b) => {
+      const dataA = new Date(`${a.dataInicio}T${a.horaInicio}`);
+      const dataB = new Date(`${b.dataInicio}T${b.horaInicio}`);
+  
+      const compareDate = dataA.getTime() - dataB.getTime();
+      if (compareDate !== 0) return compareDate;
+  
+      // Ordem personalizada de funcao: FISCAL → MOT → PAT
+      const funcaoOrdem = { FISCAL: 1, MOT: 2, PAT: 3 };
+      const funcaoA = funcaoOrdem[a.funcao] || 99;
+      const funcaoB = funcaoOrdem[b.funcao] || 99;
+  
+      return funcaoA - funcaoB;
+    });
+  
     return new ReturnPjesOperacaoDto(operacao);
   }
+  
   
 
   async remove(id: number, user: LoginPayload): Promise<void> {

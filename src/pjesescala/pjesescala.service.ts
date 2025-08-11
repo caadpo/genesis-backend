@@ -387,26 +387,35 @@ export class PjesEscalaService {
       .leftJoinAndSelect('escala.pjesevento', 'pjesevento')
       .leftJoinAndSelect('pjesevento.pjesdist', 'pjesdist')
       .leftJoinAndSelect('escala.statusLogs', 'statusLogs'); // <-- ESSENCIAL
-
+  
     if (operacaoId) {
       query.andWhere('escala.pjesOperacaoId = :operacaoId', { operacaoId });
     }
-
+  
     if (ano) {
       query.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano });
     }
-
+  
     if (mes) {
       query.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
     }
-
-    // Ordena por dataInicio e horaInicio (ambos decrescentes)
+  
     query
       .orderBy('escala.dataInicio', 'DESC')
-      .addOrderBy('escala.horaInicio', 'DESC');
-
+      .addOrderBy('escala.horaInicio', 'DESC')
+      .addOrderBy(
+        `CASE 
+          WHEN escala.funcao = 'FISCAL' THEN 1
+          WHEN escala.funcao = 'MOT' THEN 2
+          WHEN escala.funcao = 'PAT' THEN 3
+          ELSE 4
+        END`,
+        'ASC',
+      );
+  
     return await query.getMany();
   }
+  
 
   async findOne(id: number): Promise<PjesEscalaEntity> {
     const escala = await this.pjesEscalaRepository.findOne({
