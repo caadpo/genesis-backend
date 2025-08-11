@@ -139,27 +139,30 @@ export class PjesOperacaoService {
   }
 
   async findByCodOp(CodOp: string): Promise<ReturnPjesOperacaoDto> {
-    const operacao = await this.pjesOperacaoRepository.findOne({
-      where: { CodOp }, // Note a capitalização correta conforme entidade
-      relations: [
-        'pjesescalas',
-        'pjesescalas.comentarios',
-        'pjesescalas.comentarios.autor',
-        'pjesescalas.comentarios.autor.ome',
-        'pjesevento',
-        'ome',
-        'pjesescalas.statusLogs',
-      ],
-    });
-
+    const operacao = await this.pjesOperacaoRepository
+      .createQueryBuilder('operacao')
+      .leftJoinAndSelect('operacao.pjesescalas', 'pjesescalas')
+      .leftJoinAndSelect('pjesescalas.comentarios', 'comentarios')
+      .leftJoinAndSelect('comentarios.autor', 'autor')
+      .leftJoinAndSelect('autor.ome', 'autorOme')
+      .leftJoinAndSelect('operacao.pjesevento', 'pjesevento')
+      .leftJoinAndSelect('operacao.ome', 'ome')
+      .leftJoinAndSelect('pjesescalas.statusLogs', 'statusLogs')
+      .where('operacao.CodOp = :codOp', { codOp: CodOp })
+      .orderBy('pjesescalas.data_inicio', 'ASC')
+      .addOrderBy('pjesescalas.hora_inicio', 'ASC')
+      .addOrderBy('pjesescalas.funcao', 'ASC')
+      .getOne();
+  
     if (!operacao) {
       throw new NotFoundException(
         `Operação com código ${CodOp} não encontrada`,
       );
     }
-
+  
     return new ReturnPjesOperacaoDto(operacao);
   }
+  
 
   async remove(id: number, user: LoginPayload): Promise<void> {
     const operation = await this.pjesOperacaoRepository.findOne({
