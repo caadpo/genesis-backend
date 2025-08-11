@@ -628,11 +628,17 @@ export class PjesOperacaoService {
     doc.font('Times-Roman');
 
     const registrosPorPagina = 15;
+
     const funcaoOrdem: Record<string, number> = { FISCAL: 1, MOT: 2, PAT: 3 };
 
     const escalas = (operacaoDto.pjesescalas || []).slice().sort((a, b) => {
-      const dataA = new Date(`${a.dataInicio}T${a.horaInicio?.slice(0, 5) || '00:00'}`);
-      const dataB = new Date(`${b.dataInicio}T${b.horaInicio?.slice(0, 5) || '00:00'}`);
+      const dataA = new Date(a.dataInicio);
+      dataA.setHours(Number(a.horaInicio?.split(':')[0] || 0));
+      dataA.setMinutes(Number(a.horaInicio?.split(':')[1] || 0));
+
+      const dataB = new Date(b.dataInicio);
+      dataB.setHours(Number(b.horaInicio?.split(':')[0] || 0));
+      dataB.setMinutes(Number(b.horaInicio?.split(':')[1] || 0));
 
       const compareDate = dataA.getTime() - dataB.getTime();
       if (compareDate !== 0) return compareDate;
@@ -642,6 +648,7 @@ export class PjesOperacaoService {
 
       return funcaoA - funcaoB;
     });
+
 
     const startTableY = 170;
 
