@@ -129,10 +129,11 @@ export class PjesOperacaoController {
   @Delete(':id')
   async remove(
     @Param('id', ParseIntPipe) id: number,
-    @User() user: LoginPayload, // <-- adiciona isso
+    @User() user: LoginPayload,
   ): Promise<void> {
-    return this.pjesOperacaoService.remove(id, user); // <-- passa para o service
+    return this.pjesOperacaoService.remove(id, user);
   }
+  
 
   @Roles(
     UserType.Master,

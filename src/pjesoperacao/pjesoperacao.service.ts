@@ -13,7 +13,7 @@ import { Response } from 'express';
 import PDFDocument from 'pdfkit';
 import * as fs from 'fs';
 import * as path from 'path';
-type PDFDoc = InstanceType<typeof PDFDocument>; // 👈 Define o tipo correto do doc
+type PDFDoc = InstanceType<typeof PDFDocument>;
 
 @Injectable()
 export class PjesOperacaoService {
@@ -628,31 +628,7 @@ export class PjesOperacaoService {
     doc.font('Times-Roman');
 
     const registrosPorPagina = 15;
-
-    const escalas = (operacaoDto.pjesescalas || []).slice().sort((a, b) => {
-      const horaInicioA = a.horaInicio?.slice(0, 5) || '00:00';
-      const horaInicioB = b.horaInicio?.slice(0, 5) || '00:00';
-    
-      const dataTimeA = new Date(
-        `${a.dataInicio.toISOString().split('T')[0]}T${horaInicioA}:00`
-      );
-      const dataTimeB = new Date(
-        `${b.dataInicio.toISOString().split('T')[0]}T${horaInicioB}:00`
-      );
-    
-      const compareDate = dataTimeA.getTime() - dataTimeB.getTime();
-      if (compareDate !== 0) return compareDate;
-    
-      const funcaoOrdem: Record<string, number> = { FISCAL: 1, MOT: 2, PAT: 3 };
-    
-      const funcaoA = funcaoOrdem[a.funcao?.toUpperCase()] || 99;
-      const funcaoB = funcaoOrdem[b.funcao?.toUpperCase()] || 99;
-    
-      return funcaoA - funcaoB;
-    });
-    
-
-
+    const escalas = operacaoDto.pjesescalas || [];
     const startTableY = 170;
 
     addFooter();
@@ -791,14 +767,6 @@ export class PjesOperacaoService {
 
       currentY += rowHeight;
     }
-
-    console.table(escalas.map((e, i) => ({
-      i: i + 1,
-      data: e.dataInicio.toISOString().split('T')[0],
-      hora: e.horaInicio,
-      funcao: e.funcao
-    })));
-    
     doc.end();
   }
 }
