@@ -125,17 +125,14 @@ export class PjesDistService {
 
     const novaSomaOf = totalOficiaisDistribuidos + novaOfDist;
     const novaSomaPrc = totalPracasDistribuidos + novaPrcDist;
+    let alerta = null;
 
     if (novaSomaOf > teto.tetoOf) {
-      throw new BadRequestException(
-        `Atualização inválida: cotas de oficiais excedem o teto (${novaSomaOf} > ${teto.tetoOf})`,
-      );
+      alerta = 'Cuidado. Você está usando cotas Remanescentes para oficiais.';
     }
 
     if (novaSomaPrc > teto.tetoPrc) {
-      throw new BadRequestException(
-        `Atualização inválida: cotas de praças excedem o teto (${novaSomaPrc} > ${teto.tetoPrc})`,
-      );
+      alerta = 'Cuidado. Você está usando cotas Remanescentes para praças.';
     }
 
     // Impede valores menores do que já foi distribuído em eventos
