@@ -628,7 +628,26 @@ export class PjesOperacaoService {
     doc.font('Times-Roman');
 
     const registrosPorPagina = 15;
-    const escalas = operacaoDto.pjesescalas || [];
+    const escalas = (operacaoDto.pjesescalas || []).sort((a, b) => {
+      const funcaoOrder = ['FISCAL', 'MOT', 'PAT'];
+    
+      // 1. Convertemos data e hora para Date
+      const dataA = new Date(`${a.dataInicio}T${a.horaInicio || '00:00'}:00`);
+      const dataB = new Date(`${b.dataInicio}T${b.horaInicio || '00:00'}:00`);
+    
+      if (dataA < dataB) return -1;
+      if (dataA > dataB) return 1;
+    
+      // 2. Se datas e horários forem iguais, comparar função (personalizada)
+      const indexA = funcaoOrder.indexOf(a.funcao);
+      const indexB = funcaoOrder.indexOf(b.funcao);
+    
+      const valorA = indexA === -1 ? Infinity : indexA;
+      const valorB = indexB === -1 ? Infinity : indexB;
+    
+      return valorA - valorB;
+    });
+    
     const startTableY = 170;
 
     addFooter();
