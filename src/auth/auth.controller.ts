@@ -18,26 +18,25 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
-  @UsePipes(ValidationPipe)
-  @Post()
-  async login(
-    @Body() loginDto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const loginResult = await this.authService.login(loginDto);
+@UsePipes(ValidationPipe)
+@Post()
+async login(
+  @Body() loginDto: LoginDto,
+  @Res({ passthrough: true }) res: Response,
+) {
+  const loginResult = await this.authService.login(loginDto);
 
-    // Define o cookie com o accessToken (HTTP-only e com expiração correta)
-    res.cookie('accessToken', loginResult.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 1000 * 60 * 60, // 1h em milissegundos
-    });
+  // Aqui você configura o cookie
+  res.cookie('accessToken', loginResult.accessToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax', // <-- esse é o ponto para mudar!
+    maxAge: 1000 * 60 * 60, // 1h em milissegundos
+  });
 
-    // Retorna apenas os dados do usuário
-    return {
-      user: loginResult.user,
-      accessToken: loginResult.accessToken, //adcionado pos erro
-    };
-  }
+  return {
+    user: loginResult.user,
+    accessToken: loginResult.accessToken,
+  };
+}
 }
