@@ -47,19 +47,17 @@ export class PjesDistService {
     const novaSomaOf = totalOficiaisDistribuidos + data.ttCtOfDist;
     const novaSomaPrc = totalPracasDistribuidos + data.ttCtPrcDist;
 
+    if (novaSomaOf > teto.tetoOf) {
+      throw new BadRequestException(
+        `Distribuição inválida: cotas de oficiais excedem o teto permitido (${novaSomaOf} > ${teto.tetoOf})`,
+      );
+    }
 
-
-    //if (novaSomaOf > teto.tetoOf) {
-    //  throw new BadRequestException(
-    //    `Distribuição inválida: cotas de oficiais excedem o teto permitido (${novaSomaOf} > ${teto.tetoOf})`,
-    //  );
-   // }
-
-    //if (novaSomaPrc > teto.tetoPrc) {
-    //  throw new BadRequestException(
-    //    `Distribuição inválida: cotas de praças excedem o teto permitido (${novaSomaPrc} > ${teto.tetoPrc})`,
-    //  );
-   // }
+    if (novaSomaPrc > teto.tetoPrc) {
+      throw new BadRequestException(
+        `Distribuição inválida: cotas de praças excedem o teto permitido (${novaSomaPrc} > ${teto.tetoPrc})`,
+      );
+    }
 
     const dist = this.pjesDistRepository.create({
       ...data,
@@ -120,7 +118,25 @@ export class PjesDistService {
       0,
     );
 
-    
+    const novaOfDist =
+      data.ttCtOfDist !== undefined ? data.ttCtOfDist : existing.ttCtOfDist;
+    const novaPrcDist =
+      data.ttCtPrcDist !== undefined ? data.ttCtPrcDist : existing.ttCtPrcDist;
+
+    const novaSomaOf = totalOficiaisDistribuidos + novaOfDist;
+    const novaSomaPrc = totalPracasDistribuidos + novaPrcDist;
+
+    if (novaSomaOf > teto.tetoOf) {
+      throw new BadRequestException(
+        `Atualização inválida: cotas de oficiais excedem o teto (${novaSomaOf} > ${teto.tetoOf})`,
+      );
+    }
+
+    if (novaSomaPrc > teto.tetoPrc) {
+      throw new BadRequestException(
+        `Atualização inválida: cotas de praças excedem o teto (${novaSomaPrc} > ${teto.tetoPrc})`,
+      );
+    }
 
     // Impede valores menores do que já foi distribuído em eventos
     const totalOfDistribuido =
