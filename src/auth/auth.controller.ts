@@ -37,7 +37,7 @@ export class AuthController {
     // Retorna apenas os dados do usuário
     return {
       user: loginResult.user,
-      accessToken: loginResult.accessToken,
+      accessToken: loginResult.accessToken, //adcionado pos erro
     };
   }
 }
