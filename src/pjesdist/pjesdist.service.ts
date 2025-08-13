@@ -128,17 +128,17 @@ export class PjesDistService {
     const novaSomaOf = totalOficiaisDistribuidos + novaOfDist;
     const novaSomaPrc = totalPracasDistribuidos + novaPrcDist;
 
-    if (novaSomaOf > teto.tetoOf) {
-      throw new BadRequestException(
-        `Atualização inválida: cotas de oficiais excedem o teto (${novaSomaOf} > ${teto.tetoOf})`,
-      );
-    }
+    //if (novaSomaOf > teto.tetoOf) {
+    //  throw new BadRequestException(
+    //    `Atualização inválida: cotas de oficiais excedem o teto (${novaSomaOf} > ${teto.tetoOf})`,
+    //  );
+    //}
 
-    if (novaSomaPrc > teto.tetoPrc) {
-      throw new BadRequestException(
-        `Atualização inválida: cotas de praças excedem o teto (${novaSomaPrc} > ${teto.tetoPrc})`,
-      );
-    }
+    //if (novaSomaPrc > teto.tetoPrc) {
+    //  throw new BadRequestException(
+    //    `Atualização inválida: cotas de praças excedem o teto (${novaSomaPrc} > ${teto.tetoPrc})`,
+    //  );
+    //}
 
     // Impede valores menores do que já foi distribuído em eventos
     const totalOfDistribuido =
