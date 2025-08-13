@@ -631,22 +631,23 @@ export class PjesOperacaoService {
     const escalas = (operacaoDto.pjesescalas || []).sort((a, b) => {
       const funcaoOrder = ['FISCAL', 'MOT', 'PAT'];
     
-      // 1. Convertemos data e hora para Date
       const dataA = new Date(`${a.dataInicio}T${a.horaInicio || '00:00'}:00`);
       const dataB = new Date(`${b.dataInicio}T${b.horaInicio || '00:00'}:00`);
     
-      if (dataA < dataB) return -1;
-      if (dataA > dataB) return 1;
+      const indexA = funcaoOrder.indexOf((a.funcao || '').toUpperCase());
+      const indexB = funcaoOrder.indexOf((b.funcao || '').toUpperCase());
     
-      // 2. Se datas e horários forem iguais, comparar função (personalizada)
-      const indexA = funcaoOrder.indexOf(a.funcao);
-      const indexB = funcaoOrder.indexOf(b.funcao);
+      const prioridadeFuncaoA = indexA !== -1 ? indexA : 99;
+      const prioridadeFuncaoB = indexB !== -1 ? indexB : 99;
     
-      const valorA = indexA === -1 ? Infinity : indexA;
-      const valorB = indexB === -1 ? Infinity : indexB;
+      // 🔥 Aqui a diferença: montamos uma chave composta: dataHora + prioridade
+      if (dataA.getTime() !== dataB.getTime()) {
+        return dataA.getTime() - dataB.getTime(); // prioriza data/hora
+      }
     
-      return valorA - valorB;
+      return prioridadeFuncaoA - prioridadeFuncaoB; // se data/hora iguais, prioriza função
     });
+    
     
     const startTableY = 170;
 
