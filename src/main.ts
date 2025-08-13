@@ -14,7 +14,7 @@ async function bootstrap() {
       'http://localhost:3000',
       'http://localhost:4000',
       'http://191.252.214.36:4000',
-      'http://genesis.vps-kinghost.net:4000',
+      'http://genesis.vps-kinghost.net',
     ],
     credentials: true,
   });
