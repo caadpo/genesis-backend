@@ -47,17 +47,19 @@ export class PjesDistService {
     const novaSomaOf = totalOficiaisDistribuidos + data.ttCtOfDist;
     const novaSomaPrc = totalPracasDistribuidos + data.ttCtPrcDist;
 
-    if (novaSomaOf > teto.tetoOf) {
-      throw new BadRequestException(
-        `Distribuição inválida: cotas de oficiais excedem o teto permitido (${novaSomaOf} > ${teto.tetoOf})`,
-      );
-    }
 
-    if (novaSomaPrc > teto.tetoPrc) {
-      throw new BadRequestException(
-        `Distribuição inválida: cotas de praças excedem o teto permitido (${novaSomaPrc} > ${teto.tetoPrc})`,
-      );
-    }
+
+    //if (novaSomaOf > teto.tetoOf) {
+    //  throw new BadRequestException(
+    //    `Distribuição inválida: cotas de oficiais excedem o teto permitido (${novaSomaOf} > ${teto.tetoOf})`,
+    //  );
+   // }
+
+    //if (novaSomaPrc > teto.tetoPrc) {
+    //  throw new BadRequestException(
+    //    `Distribuição inválida: cotas de praças excedem o teto permitido (${novaSomaPrc} > ${teto.tetoPrc})`,
+    //  );
+   // }
 
     const dist = this.pjesDistRepository.create({
       ...data,
