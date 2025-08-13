@@ -1160,6 +1160,30 @@ export class PjesEscalaService {
     worksheet.getColumn(17).width = 6; // COD
     worksheet.getColumn(18).width = 8; // COTA
 
+
+    // 1️⃣ Ordem customizada das verbas
+    const ordemCodVerba = [247, 255, 251, 253, 252, 250, 263, 260, 266, 257, 999]; // ou outra ordem desejada
+
+    // 2️⃣ Ordenação do array 'dados'
+    dados.sort((a, b) => {
+      const posA = ordemCodVerba.indexOf(a.escala_codverba);
+      const posB = ordemCodVerba.indexOf(b.escala_codverba);
+
+      const prioridadeA = posA !== -1 ? posA : 99;
+      const prioridadeB = posB !== -1 ? posB : 99;
+
+      if (prioridadeA !== prioridadeB) {
+        return prioridadeA - prioridadeB;
+      }
+
+      // Se for a mesma verba, ordena por dataInicio
+      const dataA = new Date(a.escala_datainicio);
+      const dataB = new Date(b.escala_datainicio);
+
+      return dataA.getTime() - dataB.getTime();
+    });
+
+
     // 🔹 Dados a partir da linha 7
     dados.forEach((d, i) => {
       const row = startRow + 1 + i; // linha 7 em diante
@@ -1249,6 +1273,23 @@ export class PjesEscalaService {
       'Content-Disposition',
       `attachment; filename=escala_${mes}_${ano}.xlsx`,
     );
+
+    await worksheet.protect('genesispmpe', {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertColumns: false,
+      insertRows: false,
+      insertHyperlinks: false,
+      deleteColumns: false,
+      deleteRows: false,
+      sort: false,
+      autoFilter: false,
+      pivotTables: false,
+    });
+    
 
     await workbook.xlsx.write(res);
     res.end();
