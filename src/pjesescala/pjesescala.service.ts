@@ -149,7 +149,7 @@ export class PjesEscalaService {
       , escala.statusLogs[0]);
   
       return {
-        dia: escala.dataInicio.toISOString().split('T')[0],
+        dia: new Date(escala.dataInicio).toISOString().split('T')[0],
         nomeOperacao: escala.pjesoperacao?.nomeOperacao ?? '',
         nomeOme: escala.ome?.nomeOme ?? escala.omeSgp,
         localApresentacaoSgp: escala.localApresentacaoSgp,
