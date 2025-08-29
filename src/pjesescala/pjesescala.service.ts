@@ -79,18 +79,8 @@ export class PjesEscalaService {
       queryBuilder.andWhere('escala.id != :id', { id: escalaIdParaIgnorar });
     }
 
-    const totalCotas = await manager
-    .getRepository(PjesEscalaEntity)
-    .createQueryBuilder('escala')
-    .setLock('pessimistic_write')
-    .select('SUM(escala.ttCota)', 'total')
-    .where('escala.matSgp = :matSgp', { matSgp })
-    .andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes })
-    .andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano })
-    .andWhere(escalaIdParaIgnorar ? 'escala.id != :id' : '1=1', { id: escalaIdParaIgnorar })
-    .getRawOne()
-    .then(res => Number(res.total) || 0);
-
+    const escalas = await queryBuilder.getMany();
+    const totalCotas = escalas.reduce((sum, esc) => sum + esc.ttCota, 0);
 
     if (totalCotas + novaCota > 12) {
       throw new BadRequestException(
@@ -124,30 +114,56 @@ export class PjesEscalaService {
     matSgp: number,
     ano?: number,
     mes?: number,
-    page = 1,
-    limit = 50,
   ): Promise<MinhasEscalasDto[]> {
-    const query = this.pjesEscalaRepository
+    const queryBuilder = this.pjesEscalaRepository
       .createQueryBuilder('escala')
       .leftJoinAndSelect('escala.ome', 'ome')
       .leftJoinAndSelect('escala.pjesoperacao', 'pjesoperacao')
-      .leftJoinAndSelect('escala.statusLogs', 'statusLogs')
+      .leftJoinAndSelect('escala.comentarios', 'comentarios')
+      .leftJoinAndSelect('comentarios.autor', 'autor')
+      .leftJoinAndSelect('autor.ome', 'omeAutor')
+      .leftJoinAndSelect('escala.statusLogs', 'log')
+      .leftJoinAndMapOne(
+        'escala.teto',
+        'pjesteto',
+        'teto',
+        `teto.codVerba = escala.codVerba
+          AND teto.mes = EXTRACT(MONTH FROM escala.dataInicio)
+          AND teto.ano = EXTRACT(YEAR FROM escala.dataInicio)`,
+      )
+      .addSelect([
+        'teto.statusTeto',
+        'teto.createdAtStatusTeto',
+        'teto.statusPg',
+        'teto.createdAtStatusPg',
+      ])
       .where('escala.matSgp = :matSgp', { matSgp });
-  
-    if (ano) query.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano });
-    if (mes) query.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
-  
-    query.orderBy('escala.dataInicio', 'ASC');
-    query.skip((page - 1) * limit);
-    query.take(limit);
-  
-    const escalas = await query.getMany();
-  
-    return escalas.map(escala => {
-      const ultimoLog = escala.statusLogs.reduce((prev, curr) =>
-        curr.dataAlteracao > prev.dataAlteracao ? curr : prev
-      , escala.statusLogs[0]);
-  
+
+    if (ano) {
+      queryBuilder.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', {
+        ano,
+      });
+    }
+
+    if (mes) {
+      queryBuilder.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', {
+        mes,
+      });
+    }
+
+    queryBuilder.orderBy('escala.dataInicio', 'ASC');
+
+    const escalas = await queryBuilder.getMany();
+
+    return escalas.map((escala) => {
+      const logsOrdenados = escala.statusLogs.sort(
+        (a, b) =>
+          new Date(b.dataAlteracao).getTime() -
+          new Date(a.dataAlteracao).getTime(),
+      );
+
+      const ultimoLog = logsOrdenados[0];
+
       return {
         dia: new Date(escala.dataInicio).toISOString().split('T')[0],
         nomeOperacao: escala.pjesoperacao?.nomeOperacao ?? '',
@@ -161,15 +177,21 @@ export class PjesEscalaService {
         anotacaoEscala: escala.anotacaoEscala,
         ttCota: escala.ttCota,
         codOp: escala.pjesoperacao?.CodOp,
-        ultimoStatusLog: ultimoLog ? {
-          novoStatus: ultimoLog.novoStatus,
-          dataAlteracao: ultimoLog.dataAlteracao.toISOString(),
-          pg: ultimoLog.pg,
-          imagemUrl: ultimoLog.imagemUrl,
-          nomeGuerra: ultimoLog.nomeGuerra,
-          nomeOme: ultimoLog.nomeOme,
-        } : undefined,
-        comentarios: escala.comentarios?.map(comentario => ({
+        tetoStatusTeto: escala.teto?.statusTeto,
+        tetoCreatedAtStatusTeto: escala.teto?.createdAtStatusTeto,
+        tetoStatusPg: escala.teto?.statusPg,
+        tetoCreatedAtStatusPg: escala.teto?.createdAtStatusPg,
+        ultimoStatusLog: ultimoLog
+          ? {
+              novoStatus: ultimoLog.novoStatus,
+              dataAlteracao: ultimoLog.dataAlteracao.toISOString(),
+              pg: ultimoLog.pg,
+              imagemUrl: ultimoLog.imagemUrl,
+              nomeGuerra: ultimoLog.nomeGuerra,
+              nomeOme: ultimoLog.nomeOme,
+            }
+          : undefined,
+        comentarios: escala.comentarios?.map((comentario) => ({
           id: comentario.id,
           comentario: comentario.comentario,
           createdAt: comentario.createdAt,
@@ -182,7 +204,7 @@ export class PjesEscalaService {
       };
     });
   }
-  
+
   async getQuantidadePorMatriculaAnoMes(
     matSgp: number,
     ano: number | string,
@@ -355,22 +377,41 @@ export class PjesEscalaService {
     operacaoId?: number,
     ano?: number,
     mes?: number,
-    page = 1,
-    limit = 50,
   ): Promise<PjesEscalaEntity[]> {
     const query = this.pjesEscalaRepository
       .createQueryBuilder('escala')
+      .leftJoinAndSelect('escala.comentarios', 'comentarios')
+      .leftJoinAndSelect('comentarios.autor', 'autor')
+      .leftJoinAndSelect('autor.ome', 'omeAutor')
       .leftJoinAndSelect('escala.pjesoperacao', 'pjesoperacao')
-      .leftJoinAndSelect('escala.pjesevento', 'pjesevento');
+      .leftJoinAndSelect('escala.pjesevento', 'pjesevento')
+      .leftJoinAndSelect('pjesevento.pjesdist', 'pjesdist')
+      .leftJoinAndSelect('escala.statusLogs', 'statusLogs'); // <-- ESSENCIAL
   
-    if (operacaoId) query.andWhere('escala.pjesOperacaoId = :operacaoId', { operacaoId });
-    if (ano) query.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano });
-    if (mes) query.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
+    if (operacaoId) {
+      query.andWhere('escala.pjesOperacaoId = :operacaoId', { operacaoId });
+    }
+  
+    if (ano) {
+      query.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano });
+    }
+  
+    if (mes) {
+      query.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
+    }
   
     query
       .orderBy('escala.dataInicio', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
+      .addOrderBy('escala.horaInicio', 'DESC')
+      .addOrderBy(
+        `CASE 
+          WHEN escala.funcao = 'FISCAL' THEN 1
+          WHEN escala.funcao = 'MOT' THEN 2
+          WHEN escala.funcao = 'PAT' THEN 3
+          ELSE 4
+        END`,
+        'ASC',
+      );
   
     return await query.getMany();
   }
