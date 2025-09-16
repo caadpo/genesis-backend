@@ -44,12 +44,14 @@ export class PjesDistController {
   )
   @Get()
   async findAll(
-    @User() user: LoginPayload,
-    @Query('mes') mes?: number,
-    @Query('ano') ano?: number,
+  @User() user: LoginPayload,
+  @Query('mes') mes?: number,
+  @Query('ano') ano?: number,
+  @Query('codVerba') codVerba?: number,
   ): Promise<ReturnPjesDistDto[]> {
-    return this.pjesDistService.findAll(user, mes, ano);
+    return this.pjesDistService.findAll(user, mes, ano, codVerba);
   }
+
 
   @Roles(
     UserType.Master,
@@ -66,6 +68,8 @@ export class PjesDistController {
   ): Promise<ReturnPjesDistDto> {
     return this.pjesDistService.findOne(id, user);
   }
+
+  
   @Roles(UserType.Master, UserType.Tecnico)
   @Put(':id')
   async update(

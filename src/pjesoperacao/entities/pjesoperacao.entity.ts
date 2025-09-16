@@ -15,7 +15,7 @@ import {
 } from 'typeorm';
 
 @Entity({ name: 'pjesoperacao' })
-@Index(['CodOp'], { unique: true }) // 👈 Adicione aqui
+@Index(['CodOp'], { unique: true })
 export class PjesOperacaoEntity {
   @PrimaryGeneratedColumn('rowid')
   id: number;

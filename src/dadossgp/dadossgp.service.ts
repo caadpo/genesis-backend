@@ -10,16 +10,16 @@ export class DadosSgpService {
     private readonly dadosSgpRepository: Repository<DadosSgpEntity>,
   ) {}
 
-  //ESSE METODO É PARA BUSCAR OS DADOS DO POLCIAL DENTRO DO MES PARA PREENCHER A ESCALA DE SERVICO
+  /**
+   * Busca os dados do policial para o mês/ano especificado.
+   */
   async buscarPorMatricula(
     matSgp: number,
     mes: number,
     ano: number,
   ): Promise<DadosSgpEntity> {
-    const dados = await this.dadosSgpRepository.findOneBy({
-      matSgp,
-      mesSgp: mes,
-      anoSgp: ano,
+    const dados = await this.dadosSgpRepository.findOne({
+      where: { matSgp, mesSgp: mes, anoSgp: ano },
     });
 
     if (!dados) {
@@ -31,14 +31,15 @@ export class DadosSgpService {
     return dados;
   }
 
-  //ESSE METODDO É PARA PREENCHER OS CAMPOS COM OS DADOS MAIS RECENTE NA HORA DE CADASTRAR UM POLICIAL
-  async buscarMaisRecentePorMatricula(matSgp: number): Promise<DadosSgpEntity> {
+  /**
+   * Busca o dado mais recente disponível do policial (último mês/ano registrado).
+   */
+  async buscarMaisRecentePorMatricula(
+    matSgp: number,
+  ): Promise<DadosSgpEntity> {
     const dado = await this.dadosSgpRepository.findOne({
       where: { matSgp },
-      order: {
-        anoSgp: 'DESC',
-        mesSgp: 'DESC',
-      },
+      order: { anoSgp: 'DESC', mesSgp: 'DESC' },
     });
 
     if (!dado) {

@@ -174,52 +174,78 @@ export class PjesDistService {
     user: LoginPayload,
     mes?: number,
     ano?: number,
+    codVerba?: number,
   ): Promise<ReturnPjesDistDto[]> {
-    const where: any = {};
-    if (mes) where.mes = mes;
-    if (ano) where.ano = ano;
-
-    // Aplica filtro por diretoriaId se não for Master (10) ou Tecnico (5)
+    // 1. Consulta principal, SEM as escalas
+    const query = this.pjesDistRepository
+      .createQueryBuilder('dist')
+      .leftJoinAndSelect('dist.diretoria', 'diretoria')
+      .leftJoinAndSelect('dist.pjeseventos', 'pjeseventos')
+      .leftJoinAndSelect('pjeseventos.ome', 'ome')
+      .leftJoinAndSelect('ome.diretoria', 'ome_diretoria')
+      .leftJoinAndSelect('dist.pjesteto', 'pjesteto')
+      .leftJoinAndSelect('pjeseventos.pjesoperacoes', 'pjesoperacoes');
+  
+    if (mes) query.andWhere('dist.mes = :mes', { mes });
+    if (ano) query.andWhere('dist.ano = :ano', { ano });
+    if (codVerba) query.andWhere('dist.codVerba = :codVerba', { codVerba });
+  
     if (![5, 10].includes(user.typeUser)) {
-      where.diretoriaId = user.ome.diretoriaId;
+      query.andWhere('dist.diretoriaId = :diretoriaId', {
+        diretoriaId: user.ome.diretoriaId,
+      });
     }
-
-    const dists = await this.pjesDistRepository.find({
-      where,
-      relations: [
-        'pjeseventos.pjesoperacoes.pjesescalas',
-        'diretoria',
-        'pjeseventos.ome',
-      ],
-      order: {
-        ano: 'DESC',
-        mes: 'DESC',
-      },
+  
+    query.orderBy('dist.ano', 'DESC').addOrderBy('dist.mes', 'DESC');
+  
+    const dists = await query.getMany();
+  
+    // 2. Consulta agregada apenas com somas de cotas por evento
+    const rawSums = await this.pjesDistRepository.manager
+      .createQueryBuilder()
+      .select('op.pjeseventoId', 'eventoId')
+      .addSelect("SUM(CASE WHEN esc.tipoSgp = 'O' THEN esc.ttCota ELSE 0 END)", 'totalCotaOf')
+      .addSelect("SUM(CASE WHEN esc.tipoSgp = 'P' THEN esc.ttCota ELSE 0 END)", 'totalCotaPrc')
+      .from('pjesoperacao', 'op')
+      .leftJoin('pjesescala', 'esc', 'esc.pjesoperacaoId = op.id')
+      .groupBy('op.pjeseventoId')
+      .getRawMany();
+  
+    // 3. Mapeia os resultados por ID de evento
+    const escalaMap = new Map<number, { totalCotaOf: number; totalCotaPrc: number }>();
+    rawSums.forEach((row) => {
+      escalaMap.set(Number(row.eventoId), {
+        totalCotaOf: Number(row.totalCotaOf),
+        totalCotaPrc: Number(row.totalCotaPrc),
+      });
     });
-
-    return dists.map((dist) => new ReturnPjesDistDto(dist));
+  
+    // 4. Retorna os DTOs, repassando o mapa para calcular os totais nos eventos
+    return dists.map((dist) => new ReturnPjesDistDto(dist, escalaMap));
   }
-
+  
   async findOne(id: number, user: LoginPayload): Promise<ReturnPjesDistDto> {
-    const dist = await this.pjesDistRepository.findOne({
-      where: { id },
-      relations: ['pjeseventos', 'diretoria'],
-    });
-
+    const query = this.pjesDistRepository.createQueryBuilder('dist')
+      .leftJoinAndSelect('dist.diretoria', 'diretoria')
+      .leftJoinAndSelect('dist.pjeseventos', 'pjeseventos')
+      .where('dist.id = :id', { id });
+  
+    const dist = await query.getOne();
+  
     if (!dist) {
       throw new NotFoundException('Distribuição não encontrada');
     }
-    // Aplica filtro por diretoriaId se não for Master (10) ou Tecnico (5)
+  
     if (![5, 10].includes(user.typeUser)) {
       const userDiretoriaId = user.ome?.diretoriaId;
       if (dist.diretoriaId !== userDiretoriaId) {
         throw new BadRequestException('Acesso negado a esta distribuição.');
       }
     }
-
+  
     return new ReturnPjesDistDto(dist);
   }
-
+  
   async remove(id: number, user: LoginPayload): Promise<void> {
     const dist = await this.pjesDistRepository.findOne({
       where: { id },

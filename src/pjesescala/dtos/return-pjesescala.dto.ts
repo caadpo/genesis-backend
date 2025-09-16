@@ -1,8 +1,3 @@
-import { PjesEventoEntity } from 'src/pjesevento/entities/pjesevento.entity';
-import { PjesOperacaoEntity } from 'src/pjesoperacao/entities/pjesoperacao.entity';
-import { PjesEscalaComentarioDto } from './return-pjes-escala-comentario.dto';
-import { OmeEntity } from 'src/ome/entities/ome.entity';
-
 export class ReturnPjesEscalaDto {
   id: number;
   pjesEventoId: number;
@@ -33,11 +28,6 @@ export class ReturnPjesEscalaDto {
   userIdObs: number;
   updatedObsAt: Date;
 
-  ome?: OmeEntity;
-
-  pjesevento?: PjesEventoEntity;
-  pjesoperacao?: PjesOperacaoEntity;
-
   mes?: number;
   ano?: number;
 
@@ -46,17 +36,7 @@ export class ReturnPjesEscalaDto {
   tetoStatusPg?: string;
   tetoCreatedAtStatusPg?: Date;
 
-  ultimoStatusLog?: {
-    novoStatus: string;
-    dataAlteracao: Date;
-    pg: string;
-    imagemUrl: string;
-    nomeGuerra: string;
-    nomeOme: string;
-  };
-
-  comentarios?: PjesEscalaComentarioDto[];
-
+  
   createdAt: Date;
   updatedAt: Date;
 
@@ -93,10 +73,6 @@ export class ReturnPjesEscalaDto {
     this.createdAt = entity.createdAt;
     this.updatedAt = entity.updatedAt;
 
-    // Relacionamentos completos (aninhados)
-    this.ome = entity.ome;
-    this.pjesevento = entity.pjesevento;
-    this.pjesoperacao = entity.pjesoperacao;
 
     // Dados derivados (caso queira simplificar o consumo no frontend)
     this.mes = entity.pjesevento?.mes ?? undefined;
@@ -109,28 +85,5 @@ export class ReturnPjesEscalaDto {
     this.tetoCreatedAtStatusPg =
       entity.teto?.createdAtStatusPg ?? entity.tetoCreatedAtStatusPg;
 
-    if (entity.comentarios) {
-      this.comentarios = entity.comentarios.map(
-        (c) => new PjesEscalaComentarioDto(c),
-      );
-    }
-
-    // Último log de status (se existir)
-    if (entity.statusLogs?.length > 0) {
-      const ultimoLog = entity.statusLogs.sort(
-        (a, b) =>
-          new Date(b.dataAlteracao).getTime() -
-          new Date(a.dataAlteracao).getTime(),
-      )[0];
-
-      this.ultimoStatusLog = {
-        novoStatus: ultimoLog.novoStatus,
-        dataAlteracao: ultimoLog.dataAlteracao,
-        pg: ultimoLog.pg,
-        imagemUrl: ultimoLog.imagemUrl,
-        nomeGuerra: ultimoLog.nomeGuerra,
-        nomeOme: ultimoLog.nomeOme,
-      };
-    }
   }
 }

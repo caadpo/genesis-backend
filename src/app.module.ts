@@ -28,7 +28,9 @@ import { DadosSgpModule } from './dadossgp/dadossgp.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
     }),
+    
 
     TypeOrmModule.forRoot({
       type: 'postgres',

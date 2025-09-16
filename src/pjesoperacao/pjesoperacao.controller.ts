@@ -24,6 +24,7 @@ import { Roles } from 'src/decorators/roles.decorator';
 import { UserType } from 'src/user/enum/user-type.enum';
 
 import { Response } from 'express';
+import { ReturnPjesEscalaDto } from 'src/pjesescala/dtos/return-pjesescala.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('pjesoperacao')
@@ -54,6 +55,22 @@ export class PjesOperacaoController {
     UserType.Auxiliar,
     UserType.Comum,
   )
+  @Get(':id/escalas')
+  async findEscalasByOperacao(
+  @Param('id', ParseIntPipe) id: number,
+  ): Promise<ReturnPjesEscalaDto[]> {
+    return this.pjesOperacaoService.findEscalasByOperacaoId(id);
+  }
+
+
+  @Roles(
+    UserType.Master,
+    UserType.Tecnico,
+    UserType.Superintendente,
+    UserType.Diretor,
+    UserType.Auxiliar,
+    UserType.Comum,
+  )
   @Get('by-codop')
   async findByCodOp(@Query('codOp') codOp: string): Promise<ReturnPjesOperacaoDto> {
    return this.pjesOperacaoService.findByCodOp(codOp);
@@ -68,10 +85,19 @@ export class PjesOperacaoController {
     UserType.Comum,
   )
   @Get()
-  async findAll(): Promise<ReturnPjesOperacaoDto[]> {
-    return this.pjesOperacaoService.findAll();
+  async findAll(
+    @Query('mes') mes?: number,
+    @Query('ano') ano?: number,
+    @User() user?: LoginPayload
+  ): Promise<ReturnPjesOperacaoDto[]> {
+    return this.pjesOperacaoService.findAll({
+      mes,
+      ano,
+      user,
+    });
   }
 
+  
   @Roles(
     UserType.Master,
     UserType.Tecnico,

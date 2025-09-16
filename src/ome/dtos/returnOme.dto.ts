@@ -1,34 +1,21 @@
-import { OmeEntity } from '../entities/ome.entity';
-
 export class ReturnOmeDto {
   id: number;
   nomeOme: string;
   diretoriaId: number;
-  diretoria?: {
-    id: number;
-    nomeDiretoria: string;
-    dpo?: {
-      id: number;
-      nomeDpo: string;
-    };
-  };
 
-  constructor(ome: OmeEntity) {
+  SomattCtOfEvento?: number;
+  SomattCtPrcEvento?: number;
+  SomattCtOfEscala?: number;
+  SomattCtPrcEscala?: number;
+
+  constructor(ome: any) {
     this.id = ome.id;
     this.nomeOme = ome.nomeOme;
     this.diretoriaId = ome.diretoriaId;
 
-    if (ome.diretoria) {
-      this.diretoria = {
-        id: ome.diretoria.id,
-        nomeDiretoria: ome.diretoria.nomeDiretoria,
-        dpo: ome.diretoria.dpo
-          ? {
-              id: ome.diretoria.dpo.id,
-              nomeDpo: ome.diretoria.dpo.nomeDpo,
-            }
-          : undefined,
-      };
-    }
+    this.SomattCtOfEvento = ome.SomattCtOfEvento ?? 0;
+    this.SomattCtPrcEvento = ome.SomattCtPrcEvento ?? 0;
+    this.SomattCtOfEscala = ome.SomattCtOfEscala ?? 0;
+    this.SomattCtPrcEscala = ome.SomattCtPrcEscala ?? 0;
   }
 }

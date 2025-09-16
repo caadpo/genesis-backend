@@ -26,13 +26,60 @@ export class DiretoriaService {
     return diretorias.map((diretoria) => new ReturnDiretoriaDto(diretoria));
   }
 
-  async findOne(id: number): Promise<ReturnDiretoriaDto> {
-    const diretoria = await this.diretoriaRepository.findOne({ where: { id } });
-    if (!diretoria)
+  async findOne(
+    id: number,
+    mes?: number,
+    ano?: number,
+    codVerba?: number, // <-- Novo parâmetro
+  ): Promise<ReturnDiretoriaDto> {
+    const diretoria = await this.diretoriaRepository.findOne({
+      where: { id },
+      relations: ['omes'],
+    });
+  
+    if (!diretoria) {
       throw new NotFoundException(`DIRETORIA com ID ${id} não encontrada.`);
+    }
+  
+    if (mes && ano) {
+      for (const ome of diretoria.omes) {
+        // Eventos
+        const [sumEvento] = await this.diretoriaRepository.query(
+          `
+          SELECT
+            COALESCE(SUM(ttCtOfEvento), 0) AS "SomattCtOfEvento",
+            COALESCE(SUM(ttCtPrcEvento), 0) AS "SomattCtPrcEvento"
+          FROM pjesevento
+          WHERE omeId = $1 AND mes = $2 AND ano = $3
+          ${codVerba ? 'AND codVerba = $4' : ''}
+          `,
+          codVerba ? [ome.id, mes, ano, codVerba] : [ome.id, mes, ano],
+        );
+  
+        // Escalas
+        const [sumEscala] = await this.diretoriaRepository.query(
+          `
+          SELECT
+            COALESCE(SUM(CASE WHEN tipoSgp = 'O' THEN ttCota ELSE 0 END), 0) AS "SomattCtOfEscala",
+            COALESCE(SUM(CASE WHEN tipoSgp = 'P' THEN ttCota ELSE 0 END), 0) AS "SomattCtPrcEscala"
+          FROM pjesescala
+          WHERE omeId = $1 AND EXTRACT(MONTH FROM dataInicio) = $2 AND EXTRACT(YEAR FROM dataInicio) = $3
+          ${codVerba ? 'AND codVerba = $4' : ''}
+          `,
+          codVerba ? [ome.id, mes, ano, codVerba] : [ome.id, mes, ano],
+        );
+  
+        Object.assign(ome, {
+          ...sumEvento,
+          ...sumEscala,
+        });
+      }
+    }
+  
     return new ReturnDiretoriaDto(diretoria);
   }
-
+  
+  
   async update(
     id: number,
     data: Partial<CreateDiretoriaDto>,

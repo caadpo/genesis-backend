@@ -18,6 +18,7 @@ export class ReturnPjesDistDto {
   updatedAt: Date;
 
   nomeDiretoria: string;
+  nomeVerba?: string;
 
   eventos?: ReturnPjesEventoDto[];
 
@@ -31,7 +32,10 @@ export class ReturnPjesDistDto {
   ttOfDistMenosEvento = 0;
   ttPrcDistMenosEvento = 0;
 
-  constructor(dist: PjesDistEntity) {
+  constructor(
+    dist: PjesDistEntity,
+    escalaMap?: Map<number, { totalCotaOf: number; totalCotaPrc: number }>
+  ) {
     this.id = dist.id;
     this.nomeDist = dist.nomeDist;
     this.pjesTetoId = dist.pjesTetoId;
@@ -47,48 +51,38 @@ export class ReturnPjesDistDto {
     this.updatedAt = dist.updatedAt;
 
     this.nomeDiretoria = dist.diretoria?.nomeDiretoria ?? '';
+    this.nomeVerba = dist.pjesteto?.nomeVerba ?? '';
 
     let somaTtCtOfEvento = 0;
     let somaTtCtPrcEvento = 0;
 
     if (Array.isArray(dist.pjeseventos)) {
-      this.eventos = dist.pjeseventos.map((ev) => new ReturnPjesEventoDto(ev));
+      this.eventos = dist.pjeseventos.map((ev) => {
+        // Obtém somas da escala (já agregadas)
+        const escalaSums = escalaMap?.get(ev.id);
 
-      for (const ev of dist.pjeseventos) {
+        // Incrementa totais com base nos valores agregados
+        this.ttCotaOfEscala += escalaSums?.totalCotaOf ?? 0;
+        this.ttCotaPrcEscala += escalaSums?.totalCotaPrc ?? 0;
+
         // Contador de eventos autorizados
         if (ev.statusEvento === 'AUTORIZADA') {
           this.ttEventosAutorizados++;
         }
 
-        // Acumula totais de evento
+        // Soma os totais de evento (para cálculo de diferença)
         somaTtCtOfEvento += ev.ttCtOfEvento ?? 0;
         somaTtCtPrcEvento += ev.ttCtPrcEvento ?? 0;
 
-        for (const op of ev.pjesoperacoes ?? []) {
-          for (const escala of op.pjesescalas ?? []) {
-            // Contador de impedidos
-            if (escala.situacaoSgp?.toUpperCase().startsWith('IMPEDIDO -')) {
-              this.ttPmsImpedidos++;
-            }
-
-            // Cálculo da escala autorizada
-            if (escala.statusEscala === 'AUTORIZADA') {
-              if (escala.tipoSgp === 'O') {
-                this.ttCotaOfEscala += escala.ttCota ?? 0;
-              } else if (escala.tipoSgp === 'P') {
-                this.ttCotaPrcEscala += escala.ttCota ?? 0;
-              }
-            }
-          }
-        }
-      }
+        return new ReturnPjesEventoDto(ev, undefined, { escalaSums });
+      });
     }
 
-    // Calcula os saldos:
+    // Saldo de cotas (distribuído - executado)
     this.ttCotaOfSaldo = this.ttCtOfDist - this.ttCotaOfEscala;
     this.ttCotaPrcSaldo = this.ttCtPrcDist - this.ttCotaPrcEscala;
 
-    // Calcula a diferença entre Dist e Evento:
+    // Diferença entre total da distribuição e dos eventos
     this.ttOfDistMenosEvento = this.ttCtOfDist - somaTtCtOfEvento;
     this.ttPrcDistMenosEvento = this.ttCtPrcDist - somaTtCtPrcEvento;
   }

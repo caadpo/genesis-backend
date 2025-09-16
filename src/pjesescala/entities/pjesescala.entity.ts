@@ -106,9 +106,10 @@ export class PjesEscalaEntity {
   @JoinColumn({ name: 'pjeseventoid', referencedColumnName: 'id' })
   pjesevento?: PjesEventoEntity;
 
-  @ManyToOne(() => PjesOperacaoEntity)
+  @ManyToOne(() => PjesOperacaoEntity, (operacao) => operacao.pjesescalas)
   @JoinColumn({ name: 'pjesoperacaoid', referencedColumnName: 'id' })
   pjesoperacao?: PjesOperacaoEntity;
+
 
   @ManyToOne(() => UserEntity)
   @JoinColumn({ name: 'userid', referencedColumnName: 'id' })

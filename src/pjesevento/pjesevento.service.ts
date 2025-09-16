@@ -16,6 +16,7 @@ import { ReturnPjesOperacaoDto } from 'src/pjesoperacao/dtos/return-pjesoperacao
 import { PjesEscalaEntity } from 'src/pjesescala/entities/pjesescala.entity';
 import { PjesOperacaoEntity } from 'src/pjesoperacao/entities/pjesoperacao.entity';
 import { StatusEventoEnum } from 'src/utils/status-evento.enum';
+import { ReturnPjesOperacaoResumoDto } from 'src/pjesoperacao/dtos/return-pjesoperacao-resumo.dto';
 
 @Injectable()
 export class PjesEventoService {
@@ -109,147 +110,113 @@ export class PjesEventoService {
     return new ReturnPjesEventoDto(withRelations);
   }
 
+  async contarImpedidosPorEventoMesAno(): Promise<
+    { eventoId: number; mes: number; ano: number; totalImpedidos: number }[]
+  > {
+    const resultados = await this.pjesEscalaRepository
+      .createQueryBuilder('escala')
+      .select('escala.pjesEventoId', 'eventoId')
+      .addSelect('EXTRACT(MONTH FROM escala.dataInicio)', 'mes')
+      .addSelect('EXTRACT(YEAR FROM escala.dataInicio)', 'ano')
+      .addSelect('COUNT(*)', 'totalImpedidos')
+      .where('escala.situacaoSgp LIKE :impedido', { impedido: 'IMPEDIDO -%' })
+      .groupBy('escala.pjesEventoId')
+      .addGroupBy('EXTRACT(MONTH FROM escala.dataInicio)')
+      .addGroupBy('EXTRACT(YEAR FROM escala.dataInicio)')
+      .getRawMany();
+
+    return resultados.map((r) => ({
+      eventoId: parseInt(r.eventoId),
+      mes: parseInt(r.mes),
+      ano: parseInt(r.ano),
+      totalImpedidos: parseInt(r.totalImpedidos),
+    }));
+  }
+
   async findAll(
     mes?: number,
     ano?: number,
     user?: LoginPayload,
   ): Promise<ReturnPjesEventoDto[]> {
-    const where: any = {};
-
-    if (mes) where.pjesdist = { mes };
-    if (ano) where.pjesdist = { ...where.pjesdist, ano };
-
-    const items = await this.pjeseventoRepository.find({
-      where,
-      relations: [
-        'ome',
-        'ome.diretoria',
-        'pjesoperacoes',
-        'pjesoperacoes.ome',
-        'pjesoperacoes.pjesescalas',
-        'pjesoperacoes.pjesescalas.comentarios', // ✅ necessário!
-        'pjesoperacoes.pjesescalas.comentarios.autor', // ✅ opcional (se quiser detalhes do autor)
-        'pjesdist',
-        'pjesdist.diretoria',
-      ],
-      order: { omeId: 'DESC' },
-    });
-
-    let filtrados = items;
-
+  
+    // 1. Consulta as somas agrupadas por operação
+    const somasPorOperacao = await this.pjesEscalaRepository
+      .createQueryBuilder('escala')
+      .select('escala.pjesOperacaoId', 'operacaoId')
+      .addSelect("SUM(CASE WHEN escala.tipoSgp = 'O' THEN escala.ttCota ELSE 0 END)", 'ttCtOfExeOper')
+      .addSelect("SUM(CASE WHEN escala.tipoSgp = 'P' THEN escala.ttCota ELSE 0 END)", 'ttCtPrcExeOper')
+      .groupBy('escala.pjesOperacaoId')
+      .getRawMany();
+  
+    // 2. Consulta eventos com operações e relações
+    const query = this.pjeseventoRepository
+  .createQueryBuilder('evento')
+  .leftJoinAndSelect('evento.ome', 'ome')
+  .leftJoinAndSelect('ome.diretoria', 'omeDiretoria') // <== isso
+  .leftJoinAndSelect('evento.pjesdist', 'pjesdist')
+  .leftJoinAndSelect('pjesdist.diretoria', 'diretoria')
+  .leftJoinAndSelect('evento.pjesoperacoes', 'operacao')
+  .leftJoinAndSelect('operacao.ome', 'operacaoOme');
+  
+    if (mes) query.andWhere('pjesdist.mes = :mes', { mes });
+    if (ano) query.andWhere('pjesdist.ano = :ano', { ano });
+  
+    let eventos = await query.orderBy('evento.omeId', 'DESC').getMany();
+  
+    // 3. Filtra eventos conforme tipo de usuário
     if (user?.typeUser === 1) {
-      filtrados = items.filter((evento) => evento.omeId === user.omeId);
+      eventos = eventos.filter((evento) => evento.omeId === user.omeId);
     } else if (user?.typeUser === 3) {
-      filtrados = items.filter((evento) => {
+      eventos = eventos.filter((evento) => {
         if (evento.codVerba !== 247) {
           return evento.pjesdist?.diretoriaId === user.ome?.diretoriaId;
         }
         return evento.ome?.diretoriaId === user.ome?.diretoriaId;
       });
     }
-
-    return filtrados.map((evento) => {
-      const operacoesComDTO = evento.pjesoperacoes?.map(
-        (op) => new ReturnPjesOperacaoDto(op),
-      );
-
-      const eventoDTO = new ReturnPjesEventoDto(evento, operacoesComDTO);
-
-      return eventoDTO;
-    });
-  }
-
-  async findAllResumoPorDiretoria(
-    mes?: number,
-    ano?: number,
-    omeMin?: number,
-    omeMax?: number,
-    user?: LoginPayload,
-    codVerba?: number,
-  ): Promise<{
-    eventos: ReturnPjesEventoDto[];
-    resumo: {
-      somattCtOfEvento: number;
-      somattCotaOfEscala: number;
-      somattCtPrcEvento: number;
-      somattCotaPrcEscala: number;
-      valorTtPlanejado: number;
-      valorTtExecutado: number;
-      saldoFinal: number;
-    };
-  }> {
-    const where: any = {};
-
-    if (mes) where.pjesdist = { mes };
-    if (ano) where.pjesdist = { ...where.pjesdist, ano };
-    if (omeMin !== undefined && omeMax !== undefined) {
-      where.omeId = Between(omeMin, omeMax);
-    }
-    if (codVerba !== undefined) {
-      where.codVerba = codVerba;
-    }
-
-    const items = await this.pjeseventoRepository.find({
-      where,
-      relations: [
-        'ome',
-        'ome.diretoria',
-        'pjesoperacoes.pjesescalas',
-        'pjesdist',
-      ],
-      order: { omeId: 'ASC' },
-    });
-
-    let filtrados = items;
-
-    if (user?.typeUser === 1) {
-      filtrados = items.filter((evento) => evento.omeId === user.omeId);
-    } else if (user?.typeUser === 3) {
-      filtrados = items.filter((evento) => {
-        if (evento.codVerba !== 247) {
-          return evento.pjesdist?.diretoriaId === user.ome?.diretoriaId;
-        } else {
-          return evento.ome?.diretoriaId === user.ome?.diretoriaId;
-        }
+  
+    // 4. Mapeia as operações de cada evento adicionando as somas
+    return eventos.map((evento) => {
+      // Para cada operação do evento, encontra a soma agregada e cria o DTO com essa info
+      const operacoesResumoDTO = evento.pjesoperacoes?.map((op) => {
+        const soma = somasPorOperacao.find((s) => s.operacaoId === op.id);
+        const ttCtOfExeOper = soma ? parseInt(soma.ttCtOfExeOper, 10) : 0;
+        const ttCtPrcExeOper = soma ? parseInt(soma.ttCtPrcExeOper, 10) : 0;
+  
+        return new ReturnPjesOperacaoResumoDto(op, {
+          ttCtOfExeOper,
+          ttCtPrcExeOper,
+        });
       });
-    }
-
-    const dtos = filtrados.map((item) => new ReturnPjesEventoDto(item));
-
-    // 👇 Agrupamento por omeId e codVerba
-    const eventosAgrupados = this.agruparEventoComTotais(dtos);
-
-    const resumo = {
-      somattCtOfEvento: 0,
-      somattCotaOfEscala: 0,
-      somattCtPrcEvento: 0,
-      somattCotaPrcEscala: 0,
-      valorTtPlanejado: 0,
-      valorTtExecutado: 0,
-      saldoFinal: 0,
-    };
-
-    for (const dto of eventosAgrupados) {
-      resumo.somattCtOfEvento += dto.somattCtOfEvento;
-      resumo.somattCotaOfEscala += dto.somattCotaOfEscala;
-      resumo.somattCtPrcEvento += dto.somattCtPrcEvento;
-      resumo.somattCotaPrcEscala += dto.somattCotaPrcEscala;
-      resumo.valorTtPlanejado += dto.valorTtPlanejado || 0;
-      resumo.valorTtExecutado += dto.valorTtExecutado || 0;
-      resumo.saldoFinal += dto.saldoFinal || 0;
-    }
-
-    return { eventos: eventosAgrupados, resumo };
+  
+      // Retorna o evento já com operações resumidas preenchidas
+      return new ReturnPjesEventoDto(evento, operacoesResumoDTO, { reduzir: true });
+    });
   }
-
+  
   async findOne(id: number): Promise<ReturnPjesEventoDto> {
-    const pjesevento = await this.pjeseventoRepository.findOneBy({ id });
-    if (!pjesevento) {
+    const evento = await this.pjeseventoRepository
+      .createQueryBuilder('evento')
+      .leftJoinAndSelect('evento.ome', 'ome')
+      .leftJoinAndSelect('evento.pjesoperacoes', 'operacao')
+      .leftJoinAndSelect('operacao.ome', 'omeOperacao')
+      .leftJoinAndSelect('operacao.pjesescalas', 'escalas') // traz escalas para detalhe
+      .where('evento.id = :id', { id })
+      .getOne();
+  
+    if (!evento) {
       throw new NotFoundException('Evento não encontrado');
     }
-    return new ReturnPjesEventoDto(pjesevento);
+  
+    // Aqui uso o DTO completo que inclui escalas
+    const operacoesDTO = evento.pjesoperacoes?.map(
+      (op) => new ReturnPjesOperacaoDto(op),
+    );
+  
+    // Reduzido = false para detalhe completo
+    return new ReturnPjesEventoDto(evento, operacoesDTO, { reduzir: false });
   }
-
+  
   async update(
     id: number,
     updateDto: CreatePjesEventoDto,
@@ -406,17 +373,16 @@ export class PjesEventoService {
     // Validação dos limites da distribuição
     if (novaSomaOf > dist.ttCtOfDist) {
       throw new BadRequestException(
-        `Atualização inválida: oficiais excedem limite da distribuição (${novaSomaOf} > ${dist.ttCtOfDist})`,
+        `Atualização inválida: oficiais excedem limite da distribuição`,
       );
     }
 
     if (novaSomaPrc > dist.ttCtPrcDist) {
       throw new BadRequestException(
-        `Atualização inválida: praças excedem limite da distribuição (${novaSomaPrc} > ${dist.ttCtPrcDist})`,
+        `Atualização inválida: praças excedem limite da distribuição`,
       );
     }
 
-    // 🔒 Remove pjesDistId do DTO para não permitir alteração
     delete updateDto.pjesDistId;
 
     // Atualiza e salva
@@ -440,37 +406,52 @@ export class PjesEventoService {
       where: { id },
       relations: ['pjesdist', 'ome'],
     });
-
+  
     if (!evento) {
       throw new NotFoundException('Evento não encontrado');
     }
-
+  
     const dist = evento.pjesdist;
-
+  
     if (!dist) {
       throw new NotFoundException('Distribuição do evento não encontrada');
     }
-
-    // 🚫 Restringe alteração de status apenas a usuários do tipo 5 ou 10
+  
+    // 👇 Verifica se o status atual já está HOMOLOGADO
+    const statusAtual = evento.statusEvento;
+    const novoStatus = dto.statusEvento;
+  
+    // 👮 Lógica de permissão
     if (![5, 10].includes(user.typeUser)) {
-      throw new BadRequestException(
-        'Usuário sem permissão para alterar o status do evento.',
-      );
+      // ✅ Só pode alterar se for evento da sua própria OME
+      if (evento.ome?.id !== user.omeId) {
+        throw new BadRequestException(
+          'Você só pode alterar o status de eventos da sua própria OME.',
+        );
+      }
+  
+      // ✅ Só pode alterar para HOMOLOGADA
+      if (novoStatus !== 'HOMOLOGADA') {
+        throw new BadRequestException(
+          'Você só pode homologar (e não des-homologar) eventos da sua OME.',
+        );
+      }
+  
+      // ❌ Se já está homologado, não pode alterar novamente
+      if (statusAtual === 'HOMOLOGADA') {
+        throw new BadRequestException(
+          'Evento já está homologado. Alterações não são permitidas.',
+        );
+      }
     }
-
-    // Verifica se a distribuição está homologada
-    if (dist.statusDist === 'HOMOLOGADA' && user.typeUser !== 10) {
-      throw new BadRequestException(
-        'Evento pertencente a uma distribuição homologada. Alteração não permitida.',
-      );
-    }
-
-    evento.statusEvento = dto.statusEvento;
+  
+    // 👇 Para usuários 5 e 10, ou se passou nas validações acima
+    evento.statusEvento = novoStatus;
     const saved = await this.pjeseventoRepository.save(evento);
-
+  
     return new ReturnPjesEventoDto(saved);
   }
-
+  
   async remove(id: number, user: LoginPayload): Promise<void> {
     const evento = await this.pjeseventoRepository.findOne({
       where: { id },
@@ -510,56 +491,46 @@ export class PjesEventoService {
     await this.pjeseventoRepository.remove(evento);
   }
 
-  private agruparEventoComTotais(
-    eventos: ReturnPjesEventoDto[],
-  ): ReturnPjesEventoDto[] {
-    const mapa = new Map<string, ReturnPjesEventoDto>();
-
-    for (const evento of eventos) {
-      const chave = `${evento.omeId}-${evento.codVerba}`;
-
-      if (!mapa.has(chave)) {
-        mapa.set(chave, { ...evento });
-      } else {
-        const acumulado = mapa.get(chave);
-
-        acumulado.somattCtOfEvento += evento.somattCtOfEvento;
-        acumulado.somattCtPrcEvento += evento.somattCtPrcEvento;
-        acumulado.somattCotaOfEscala += evento.somattCotaOfEscala;
-        acumulado.somattCotaPrcEscala += evento.somattCotaPrcEscala;
-        acumulado.valorTtPlanejado += evento.valorTtPlanejado || 0;
-        acumulado.valorTtExecutado += evento.valorTtExecutado || 0;
-        acumulado.saldoFinal += evento.saldoFinal || 0;
-      }
-    }
-
-    return Array.from(mapa.values()).sort((a, b) => a.omeId - b.omeId);
-  }
-
   async homologarTodosEventoDoMes(
     mes: number,
     ano: number,
+    user: LoginPayload,
   ): Promise<{ qtdAtualizada: number }> {
-    // Busca eventos do mês e ano passados que não estejam homologados
-    const eventos = await this.pjeseventoRepository.find({
-      where: {
-        mes,
-        ano,
-        statusEvento: Not(StatusEventoEnum.HOMOLOGADA),
-      },
-    });
-
+    let eventos;
+  
+    if (user.typeUser === 1) {
+      // 🔒 Auxiliares só podem acessar eventos da sua própria OME
+      eventos = await this.pjeseventoRepository.find({
+        where: {
+          mes,
+          ano,
+          statusEvento: Not(StatusEventoEnum.HOMOLOGADA),
+          ome: { id: user.omeId },
+        },
+        relations: ['ome'], // necessário para garantir que ome.id seja carregado
+      });
+    } else {
+      // 👑 Técnicos e Masters podem acessar todos
+      eventos = await this.pjeseventoRepository.find({
+        where: {
+          mes,
+          ano,
+          statusEvento: Not(StatusEventoEnum.HOMOLOGADA),
+        },
+      });
+    }
+  
     if (eventos.length === 0) {
       return { qtdAtualizada: 0 };
     }
-
-    // Atualiza status para HOMOLOGADA
+  
     eventos.forEach((evento) => {
       evento.statusEvento = StatusEventoEnum.HOMOLOGADA;
     });
-
+  
     await this.pjeseventoRepository.save(eventos);
-
+  
     return { qtdAtualizada: eventos.length };
   }
+  
 }

@@ -1,4 +1,3 @@
-import { ReturnPjesDistDto } from 'src/pjesdist/dtos/return-pjesdist.dto';
 import { PjesTetoEntity } from '../entities/pjesteto.entity';
 
 export class ReturnPjesTetoDto {
@@ -16,23 +15,28 @@ export class ReturnPjesTetoDto {
   statusPg: string;
   createdAtStatusPg?: Date;
 
-  createdAt: Date;
-  updatedAt: Date;
+  // Distribuições agrupadas por diretoria
+  distribuições?: {
+    diretoriaId: number;
+    nomeDiretoria: string;
+    SomattCtOfDist: number;
+    SomattCtPrcDist: number;
+    SomaCtOfExec?: number;  // <- Novo campo
+    SomaCtPrcExec?: number; // <- Novo campo
+  }[];
 
-  // Cotas totais usadas em escalas
-  ttCotaOfEscala = 0;
-  ttCotaPrcEscala = 0;
 
-  // Saldos após escalas
-  ttCotaOfSaldo = 0;
-  ttCotaPrcSaldo = 0;
-
-  ttCotaOfDisponivelDistribuir = 0;
-  ttCotaPrcDisponivelDistribuir = 0;
-
-  dists?: ReturnPjesDistDto[];
-
-  constructor(pjesteto: PjesTetoEntity) {
+  constructor(
+    pjesteto: PjesTetoEntity,
+    totaisExec?: {
+      diretoriaId: number;
+      nomeDiretoria: string;
+      SomaCtOfExec: number;
+      SomaCtPrcExec: number;
+    }[],
+    showDistribuicoes: boolean = true,
+    userDiretoriaId?: number, // <- novo argumento
+  ) {
     this.id = pjesteto.id;
     this.imagemUrl = pjesteto.imagemUrl;
     this.nomeVerba = pjesteto.nomeVerba;
@@ -41,48 +45,58 @@ export class ReturnPjesTetoDto {
     this.tetoPrc = pjesteto.tetoPrc;
     this.mes = pjesteto.mes;
     this.ano = pjesteto.ano;
-
     this.statusTeto = pjesteto.statusTeto;
     this.createdAtStatusTeto = pjesteto.createdAtStatusTeto;
     this.statusPg = pjesteto.statusPg;
     this.createdAtStatusPg = pjesteto.createdAtStatusPg;
-
-    this.createdAt = pjesteto.createdAt;
-    this.updatedAt = pjesteto.updatedAt;
-
-    let totalOfDist = 0;
-    let totalPrcDist = 0;
-
-    if (Array.isArray(pjesteto.pjesdists)) {
+  
+    if (showDistribuicoes && pjesteto.pjesdists) {
+      const agrupado = new Map<number, {
+        diretoriaId: number;
+        nomeDiretoria: string;
+        SomattCtOfDist: number;
+        SomattCtPrcDist: number;
+        SomaCtOfExec?: number;
+        SomaCtPrcExec?: number;
+      }>();
+  
       for (const dist of pjesteto.pjesdists) {
-        totalOfDist += dist.ttCtOfDist ?? 0;
-        totalPrcDist += dist.ttCtPrcDist ?? 0;
-
-        for (const ev of dist.pjeseventos ?? []) {
-          for (const op of ev.pjesoperacoes ?? []) {
-            for (const escala of op.pjesescalas ?? []) {
-              if (escala.statusEscala === 'AUTORIZADA') {
-                if (escala.tipoSgp === 'O') {
-                  this.ttCotaOfEscala += escala.ttCota ?? 0;
-                } else if (escala.tipoSgp === 'P') {
-                  this.ttCotaPrcEscala += escala.ttCota ?? 0;
-                }
-              }
-            }
+        const diretoriaId = dist.diretoria?.id ?? 0;
+  
+        // 👉 Filtro para diretores: só vê a própria diretoria
+        if (userDiretoriaId && diretoriaId !== userDiretoriaId) {
+          continue;
+        }
+  
+        const nomeDiretoria = dist.diretoria?.nomeDiretoria ?? 'Sem Diretoria';
+  
+        if (!agrupado.has(diretoriaId)) {
+          agrupado.set(diretoriaId, {
+            diretoriaId,
+            nomeDiretoria,
+            SomattCtOfDist: dist.ttCtOfDist,
+            SomattCtPrcDist: dist.ttCtPrcDist,
+          });
+        } else {
+          const acumulado = agrupado.get(diretoriaId)!;
+          acumulado.SomattCtOfDist += dist.ttCtOfDist;
+          acumulado.SomattCtPrcDist += dist.ttCtPrcDist;
+        }
+      }
+  
+      if (totaisExec?.length) {
+        for (const exec of totaisExec) {
+          const item = agrupado.get(exec.diretoriaId);
+          if (item) {
+            item.SomaCtOfExec = exec.SomaCtOfExec;
+            item.SomaCtPrcExec = exec.SomaCtPrcExec;
           }
         }
       }
-
-      // ✅ Preenche o array de dists com nomeDiretoria, etc.
-      this.dists = pjesteto.pjesdists.map(
-        (dist) => new ReturnPjesDistDto(dist),
-      );
+  
+      this.distribuições = Array.from(agrupado.values());
     }
-
-    this.ttCotaOfSaldo = this.tetoOf - this.ttCotaOfEscala;
-    this.ttCotaPrcSaldo = this.tetoPrc - this.ttCotaPrcEscala;
-
-    this.ttCotaOfDisponivelDistribuir = this.tetoOf - totalOfDist;
-    this.ttCotaPrcDisponivelDistribuir = this.tetoPrc - totalPrcDist;
   }
+  
+  
 }

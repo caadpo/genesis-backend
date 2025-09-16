@@ -47,6 +47,21 @@ export class PjesEventoController {
     UserType.Diretor,
     UserType.Auxiliar,
   )
+  @Get('impedidos/resumo')
+  async contarImpedidos(): Promise<
+    { eventoId: number; mes: number; ano: number; totalImpedidos: number }[]
+  > {
+    return this.pjeseventoService.contarImpedidosPorEventoMesAno();
+  }
+  
+
+  @Roles(
+    UserType.Master,
+    UserType.Tecnico,
+    UserType.Superintendente,
+    UserType.Diretor,
+    UserType.Auxiliar,
+  )
   @Get()
   async findAll(
     @Query('mes') mes?: number,
@@ -56,40 +71,18 @@ export class PjesEventoController {
     return this.pjeseventoService.findAll(mes, ano, user);
   }
 
-  @Roles(
-    UserType.Master,
-    UserType.Tecnico,
-    UserType.Superintendente,
-    UserType.Diretor,
-    UserType.Auxiliar,
-  )
-  @Get('resumo-por-diretoria')
-  async findAllResumoPorDiretoria(
-    @Query('mes') mes?: number,
-    @Query('ano') ano?: number,
-    @Query('omeMin') omeMin?: number,
-    @Query('omeMax') omeMax?: number,
-    @User() user?: LoginPayload,
-  ): Promise<any> {
-    return this.pjeseventoService.findAllResumoPorDiretoria(
-      mes,
-      ano,
-      Number(omeMin),
-      Number(omeMax),
-      user,
-    );
-  }
-
-  @Roles(UserType.Master, UserType.Tecnico)
+  @Roles(UserType.Master, UserType.Tecnico, UserType.Auxiliar)
   @Get('homologartodoseventodomes')
   async homologarTodosEventoDoMes(
-    @Query('mes', ParseIntPipe) mes: number,
-    @Query('ano', ParseIntPipe) ano: number,
-  ): Promise<{ qtdAtualizada: number }> {
-    return await this.pjeseventoService.homologarTodosEventoDoMes(mes, ano);
-  }
+  @Query('mes', ParseIntPipe) mes: number,
+  @Query('ano', ParseIntPipe) ano: number,
+  @User() user: LoginPayload,
+): Promise<{ qtdAtualizada: number }> {
+  return await this.pjeseventoService.homologarTodosEventoDoMes(mes, ano, user); // 👈 e passado aqui
+}
 
-  @Roles(UserType.Master, UserType.Tecnico, UserType.Diretor)
+
+  @Roles(UserType.Master, UserType.Tecnico)
   @Put(':id')
   async update(
     @Param('id') id: number,
@@ -99,7 +92,7 @@ export class PjesEventoController {
     return this.pjeseventoService.update(id, updatePjesEventoDto, user);
   }
 
-  @Roles(UserType.Master, UserType.Tecnico)
+  @Roles(UserType.Master, UserType.Tecnico, UserType.Auxiliar)
   @Put(':id/status')
   async updateStatusEvento(
     @Param('id', ParseIntPipe) id: number,

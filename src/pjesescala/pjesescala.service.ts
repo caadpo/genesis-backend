@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, EntityManager, Not, Raw, Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { PjesEscalaEntity } from './entities/pjesescala.entity';
 import { PjesEventoEntity } from 'src/pjesevento/entities/pjesevento.entity';
 import { CreatePjesEscalaDto } from './dtos/create-pjesescala.dto';
@@ -22,6 +22,7 @@ import { PjesEscalaStatusLogEntity } from './entities/pjesescala-status-log.enti
 import { CreateComentarioDto } from './dtos/create-comentario.dto';
 import { PjesEscalaComentarioEntity } from './entities/pjesescala-comentario.entity';
 import { MinhasEscalasDto } from './dtos/minhas-escalas.dto';
+import { parseISO } from 'date-fns';
 
 @Injectable()
 export class PjesEscalaService {
@@ -66,50 +67,57 @@ export class PjesEscalaService {
   ): Promise<void> {
     const mes = dataInicio.getMonth() + 1;
     const ano = dataInicio.getFullYear();
-
-    const queryBuilder = manager
+  
+    const query = manager
       .getRepository(PjesEscalaEntity)
       .createQueryBuilder('escala')
-      .setLock('pessimistic_write') // <-- LOCK que evita concorrência
+      .select('SUM(escala.ttCota)', 'total') // 🔄 Mantido
       .where('escala.matSgp = :matSgp', { matSgp })
       .andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes })
       .andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano });
-
+  
     if (escalaIdParaIgnorar) {
-      queryBuilder.andWhere('escala.id != :id', { id: escalaIdParaIgnorar });
+      query.andWhere('escala.id != :id', { id: escalaIdParaIgnorar });
     }
-
-    const escalas = await queryBuilder.getMany();
-    const totalCotas = escalas.reduce((sum, esc) => sum + esc.ttCota, 0);
-
-    if (totalCotas + novaCota > 12) {
+  
+    const { total } = await query.getRawOne(); // ✅ Sem lock
+  
+    const cotasExistentes = Number(total) || 0;
+  
+    if (cotasExistentes + novaCota > 12) {
       throw new BadRequestException(
         'Usuário não pode ultrapassar o limite de cotas mensais (12).',
       );
     }
   }
-
+  
   async getCotasDetalhadasPorMatricula(
     matSgp: number,
     ano: number,
     mes: number,
   ): Promise<{ dia: string; nomeOme: string; ttCota: number }[]> {
-    const escalas = await this.pjesEscalaRepository
+    const resultados = await this.pjesEscalaRepository
       .createQueryBuilder('escala')
-      .leftJoinAndSelect('escala.ome', 'ome')
+      .select([
+        `TO_CHAR(escala.dataInicio, 'YYYY-MM-DD') AS dia`,
+        `ome.nomeOme AS "nomeOme"`,
+        `escala.ttCota AS "ttCota"`,
+      ])
+      .leftJoin('escala.ome', 'ome')
       .where('escala.matSgp = :matSgp', { matSgp })
       .andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes })
       .andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano })
       .orderBy('escala.dataInicio', 'ASC')
-      .getMany();
-
-    return escalas.map((escala) => ({
-      dia: new Date(escala.dataInicio).toISOString().split('T')[0],
-      nomeOme: escala.ome?.nomeOme || escala.omeSgp,
-      ttCota: escala.ttCota,
-    }));
+      .getRawMany();
+  
+      return resultados.map((r) => ({
+        dia: r.dia,
+        nomeOme: r.nomeOme ?? '', // adiciona fallback caso ainda venha null
+        ttCota: r.ttCota ? Number(r.ttCota) : 0,
+      }));
+      
   }
-
+  
   async getMinhasEscalas(
     matSgp: number,
     ano?: number,
@@ -117,120 +125,145 @@ export class PjesEscalaService {
   ): Promise<MinhasEscalasDto[]> {
     const queryBuilder = this.pjesEscalaRepository
       .createQueryBuilder('escala')
-      .leftJoinAndSelect('escala.ome', 'ome')
-      .leftJoinAndSelect('escala.pjesoperacao', 'pjesoperacao')
-      .leftJoinAndSelect('escala.comentarios', 'comentarios')
-      .leftJoinAndSelect('comentarios.autor', 'autor')
-      .leftJoinAndSelect('autor.ome', 'omeAutor')
-      .leftJoinAndSelect('escala.statusLogs', 'log')
-      .leftJoinAndMapOne(
-        'escala.teto',
+      .leftJoin('escala.ome', 'ome')
+      .leftJoin('escala.pjesoperacao', 'pjesoperacao')
+      .leftJoin(
         'pjesteto',
         'teto',
-        `teto.codVerba = escala.codVerba
+        `teto.codverba = escala.codverba
           AND teto.mes = EXTRACT(MONTH FROM escala.dataInicio)
-          AND teto.ano = EXTRACT(YEAR FROM escala.dataInicio)`,
+          AND teto.ano = EXTRACT(YEAR FROM escala.dataInicio)`
       )
       .addSelect([
-        'teto.statusTeto',
-        'teto.createdAtStatusTeto',
-        'teto.statusPg',
-        'teto.createdAtStatusPg',
+        'teto.status_teto AS teto_status_teto',
+        'teto.created_at_status_teto AS teto_created_at_status_teto',
+        'teto.status_pg AS teto_status_pg',
+        'teto.created_at_status_pg AS teto_created_at_status_pg',
+        'pjesoperacao.nomeOperacao AS pjesoperacao_nomeOperacao',
+        'pjesoperacao.codOp AS pjesoperacao_codOp',
       ])
       .where('escala.matSgp = :matSgp', { matSgp });
-
+  
     if (ano) {
-      queryBuilder.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', {
-        ano,
-      });
+      queryBuilder.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano });
     }
-
+  
     if (mes) {
-      queryBuilder.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', {
-        mes,
-      });
+      queryBuilder.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
     }
-
+  
     queryBuilder.orderBy('escala.dataInicio', 'ASC');
-
-    const escalas = await queryBuilder.getMany();
-
-    return escalas.map((escala) => {
-      const logsOrdenados = escala.statusLogs.sort(
-        (a, b) =>
-          new Date(b.dataAlteracao).getTime() -
-          new Date(a.dataAlteracao).getTime(),
-      );
-
-      const ultimoLog = logsOrdenados[0];
-
+  
+    // Usar getRawMany para pegar tudo como raw, pois temos colunas de tabela 'teto' no select
+    const rawResults = await queryBuilder.getRawMany();
+  
+    return rawResults.map((row) => {
+      const dataInicio = row['escala_datainicio'];
+    
       return {
-        dia: new Date(escala.dataInicio).toISOString().split('T')[0],
-        nomeOperacao: escala.pjesoperacao?.nomeOperacao ?? '',
-        nomeOme: escala.ome?.nomeOme ?? escala.omeSgp,
-        localApresentacaoSgp: escala.localApresentacaoSgp,
-        situacaoSgp: escala.situacaoSgp,
-        horaInicio: escala.horaInicio,
-        horaFinal: escala.horaFinal,
-        funcao: escala.funcao,
-        statusEscala: escala.statusEscala,
-        anotacaoEscala: escala.anotacaoEscala,
-        ttCota: escala.ttCota,
-        codOp: escala.pjesoperacao?.CodOp,
-        tetoStatusTeto: escala.teto?.statusTeto,
-        tetoCreatedAtStatusTeto: escala.teto?.createdAtStatusTeto,
-        tetoStatusPg: escala.teto?.statusPg,
-        tetoCreatedAtStatusPg: escala.teto?.createdAtStatusPg,
-        ultimoStatusLog: ultimoLog
-          ? {
-              novoStatus: ultimoLog.novoStatus,
-              dataAlteracao: ultimoLog.dataAlteracao.toISOString(),
-              pg: ultimoLog.pg,
-              imagemUrl: ultimoLog.imagemUrl,
-              nomeGuerra: ultimoLog.nomeGuerra,
-              nomeOme: ultimoLog.nomeOme,
-            }
-          : undefined,
-        comentarios: escala.comentarios?.map((comentario) => ({
-          id: comentario.id,
-          comentario: comentario.comentario,
-          createdAt: comentario.createdAt,
-          autor: {
-            nomeGuerra: comentario.autor?.nomeGuerra,
-            nomeOme: comentario.autor?.ome?.nomeOme,
-            imagemUrl: comentario.autor?.imagemUrl,
-          },
-        })),
+        dia: dataInicio ? new Date(dataInicio).toISOString().split('T')[0] : null,
+        nomeOperacao: row['pjesoperacao_nomeoperacao'] ?? '',
+        nomeOme: row['ome_nomeOme'] ?? row['escala_omesgp'],
+        localApresentacaoSgp: row['escala_localapresentacaosgp'],
+        situacaoSgp: row['escala_situacaosgp'],
+        horaInicio: row['escala_horainicio'],
+        horaFinal: row['escala_horafinal'],
+        funcao: row['escala_funcao'],
+        anotacaoEscala: row['escala_anotacaoescala'],
+        statusEscala: row['escala_statusescala'],
+        ttCota: row['escala_ttcota'],
+        codOp: row['pjesoperacao_codop'],
+        tetoStatusTeto: row['teto_status_teto'],
+        tetoCreatedAtStatusTeto: row['teto_created_at_status_teto'],
+        tetoStatusPg: row['teto_status_pg'],
+        tetoCreatedAtStatusPg: row['teto_created_at_status_pg'],
       };
     });
+    
   }
+  
+  async getQuantidadePorVariosMatriculas(
+    matSgps: number[],
+    ano: number,
+    mes: number,
+  ): Promise<{ matSgp: number; total: number }[]> {
+    if (!matSgps.length) return [];
+  
+    const inicio = new Date(ano, mes - 1, 1);
+    const fim = new Date(ano, mes, 0, 23, 59, 59, 999);
+  
+    const resultados = await this.pjesEscalaRepository
+      .createQueryBuilder('escala')
+      .select('escala.matSgp', 'matSgp')
+      .addSelect('SUM(escala.ttCota)', 'total')
+      .where('escala.matSgp IN (:...matSgps)', { matSgps })
+      .andWhere('escala.dataInicio BETWEEN :inicio AND :fim', { inicio, fim })
+      .groupBy('escala.matSgp')
+      .getRawMany();
+  
+    return resultados.map((r) => ({
+      matSgp: Number(r.matSgp),
+      total: Number(r.total) || 0,
+    }));
+  }
+  
+  async findAll(
+    operacaoId?: number,
+    ano?: number,
+    mes?: number,
+    page = 1,
+    limit = 100,
+  ): Promise<PjesEscalaEntity[]> {
+    const query = this.pjesEscalaRepository
+      .createQueryBuilder('escala')
+      .leftJoinAndSelect('escala.ome', 'ome')
+      .leftJoinAndSelect('escala.pjesoperacao', 'pjesoperacao')
+      .leftJoinAndSelect('escala.pjesevento', 'pjesevento')
+      .leftJoinAndSelect('pjesevento.pjesdist', 'pjesdist')
+      .leftJoinAndSelect('escala.statusLogs', 'statusLogs');
+  
+    if (operacaoId) {
+      query.andWhere('escala.pjesOperacaoId = :operacaoId', { operacaoId });
+    }
+  
+    if (ano) {
+      query.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano });
+    }
+  
+    if (mes) {
+      query.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
+    }
+  
+    // Adiciona coluna virtual para ordenar funções com prioridade: FISCAL > MOT > PAT
+    query
+      .addSelect(`
+        CASE 
+          WHEN escala.funcao = 'FISCAL' THEN 1
+          WHEN escala.funcao = 'MOT' THEN 2
+          WHEN escala.funcao = 'PAT' THEN 3
+          ELSE 4
+        END
+      `, 'ordem_funcao')
+      .orderBy('escala.dataInicio', 'DESC')
+      .addOrderBy('escala.horaInicio', 'DESC')
+      .addOrderBy('ordem_funcao', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
+  
+    return await query.getMany();
+  }
+    
+  async findOne(id: number): Promise<PjesEscalaEntity> {
+    const escala = await this.pjesEscalaRepository.findOne({
+      where: { id },
+      relations: ['pjesoperacao', 'pjesevento', 'pjesevento.pjesdist'],
+    });
 
-  async getQuantidadePorMatriculaAnoMes(
-    matSgp: number,
-    ano: number | string,
-    mes: number | string,
-  ): Promise<number> {
-    const parsedAno = parseInt(ano as string, 10);
-    const parsedMes = parseInt(mes as string, 10);
-
-    if (isNaN(parsedAno) || isNaN(parsedMes)) {
-      throw new BadRequestException('Ano ou mês inválido');
+    if (!escala) {
+      throw new NotFoundException('Escala não encontrada');
     }
 
-    const inicio = new Date(parsedAno, parsedMes - 1, 1);
-    const fim = new Date(parsedAno, parsedMes, 0, 23, 59, 59, 999); // fim do mês
-
-    const resultado = await this.pjesEscalaRepository
-      .createQueryBuilder('escala')
-      .select('SUM(escala.ttCota)', 'total')
-      .where('escala.matSgp = :matSgp', { matSgp })
-      .andWhere('escala.dataInicio BETWEEN :inicio AND :fim', {
-        inicio,
-        fim,
-      })
-      .getRawOne();
-
-    return Number(resultado.total) || 0;
+    return escala;
   }
 
   async create(
@@ -245,8 +278,6 @@ export class PjesEscalaService {
 
       if (!evento) throw new NotFoundException('Evento não encontrado');
 
-      /*VERIFICAÇÃO SE O USER LOGADO É O MESMO PARA O QUAL FOI DESTINADO O EVENTO */
-      /*EXCETO PARA: USUARIO MASTER E TECNICO*/
       this.verificarPermissaoDeAcesso(evento, user);
 
       if (evento.statusEvento === 'HOMOLOGADA' && user.typeUser !== 10) {
@@ -262,13 +293,7 @@ export class PjesEscalaService {
 
       if (!operacao) throw new NotFoundException('Operação não encontrada');
 
-      // Conversão segura da dataInicio, sem interferência de timezone
-      const [anoStr, mesStr, diaStr] = dto.dataInicio.split('-');
-      const dataInicio = new Date(
-        Number(anoStr),
-        Number(mesStr) - 1,
-        Number(diaStr),
-      );
+      const dataInicio = parseISO(dto.dataInicio);
 
       const mes = dataInicio.getMonth() + 1;
       const ano = dataInicio.getFullYear();
@@ -373,63 +398,6 @@ export class PjesEscalaService {
     });
   }
 
-  async findAll(
-    operacaoId?: number,
-    ano?: number,
-    mes?: number,
-  ): Promise<PjesEscalaEntity[]> {
-    const query = this.pjesEscalaRepository
-      .createQueryBuilder('escala')
-      .leftJoinAndSelect('escala.comentarios', 'comentarios')
-      .leftJoinAndSelect('comentarios.autor', 'autor')
-      .leftJoinAndSelect('autor.ome', 'omeAutor')
-      .leftJoinAndSelect('escala.pjesoperacao', 'pjesoperacao')
-      .leftJoinAndSelect('escala.pjesevento', 'pjesevento')
-      .leftJoinAndSelect('pjesevento.pjesdist', 'pjesdist')
-      .leftJoinAndSelect('escala.statusLogs', 'statusLogs'); // <-- ESSENCIAL
-  
-    if (operacaoId) {
-      query.andWhere('escala.pjesOperacaoId = :operacaoId', { operacaoId });
-    }
-  
-    if (ano) {
-      query.andWhere('EXTRACT(YEAR FROM escala.dataInicio) = :ano', { ano });
-    }
-  
-    if (mes) {
-      query.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
-    }
-  
-    query
-      .orderBy('escala.dataInicio', 'DESC')
-      .addOrderBy('escala.horaInicio', 'DESC')
-      .addOrderBy(
-        `CASE 
-          WHEN escala.funcao = 'FISCAL' THEN 1
-          WHEN escala.funcao = 'MOT' THEN 2
-          WHEN escala.funcao = 'PAT' THEN 3
-          ELSE 4
-        END`,
-        'ASC',
-      );
-  
-    return await query.getMany();
-  }
-  
-
-  async findOne(id: number): Promise<PjesEscalaEntity> {
-    const escala = await this.pjesEscalaRepository.findOne({
-      where: { id },
-      relations: ['pjesoperacao', 'pjesevento', 'pjesevento.pjesdist'],
-    });
-
-    if (!escala) {
-      throw new NotFoundException('Escala não encontrada');
-    }
-
-    return escala;
-  }
-
   async update(
     id: number,
     dto: UpdatePjesEscalaDto,
@@ -440,11 +408,11 @@ export class PjesEscalaService {
         where: { id },
         relations: ['pjesoperacao'],
       });
-
+  
       if (!escalaAtual) {
         throw new NotFoundException('Escala não encontrada');
       }
-
+  
       if (
         dto.pjesOperacaoId &&
         dto.pjesOperacaoId !== escalaAtual.pjesOperacaoId
@@ -453,36 +421,37 @@ export class PjesEscalaService {
           'Não é permitido alterar o tipo da verba já criada.',
         );
       }
-
+  
       const ome = await manager.findOne(OmeEntity, {
         where: { id: dto.omeId },
       });
-
+  
       if (!ome) {
         throw new NotFoundException(`OME não encontrada com id: ${dto.omeId}`);
       }
-
+  
       const eventoId = dto.pjesEventoId ?? escalaAtual.pjesEventoId;
       const evento = await manager.findOne(PjesEventoEntity, {
         where: { id: eventoId },
         relations: ['pjesdist'],
       });
-
+  
       if (!evento) throw new NotFoundException('Evento não encontrado');
-
+  
       this.verificarPermissaoDeAcesso(evento, user);
-
+  
       if (evento.statusEvento === 'HOMOLOGADA' && user.typeUser !== 10) {
         throw new BadRequestException(
           'Evento homologado. Contate o Administrador.',
         );
       }
-
-      const dataInicio = new Date(dto.dataInicio ?? escalaAtual.dataInicio);
+  
+      // Corrigir fuso horário ao criar a data
+      const dataInicio = new Date((dto.dataInicio ?? escalaAtual.dataInicio) + 'T00:00:00');
       if (isNaN(dataInicio.getTime())) {
         throw new BadRequestException('Data de início inválida');
       }
-
+  
       if (
         dataInicio.getMonth() + 1 !== evento.mes ||
         dataInicio.getFullYear() !== evento.ano
@@ -491,71 +460,100 @@ export class PjesEscalaService {
           'A nova data de início não corresponde ao mês/ano do evento.',
         );
       }
-
+  
       const matSgp = dto.matSgp ?? escalaAtual.matSgp;
-
+  
       const existeoutra = await manager
         .getRepository(PjesEscalaEntity)
         .createQueryBuilder('escala')
-        .where('escala.matSgp = :matSgp', { matSgp: dto.matSgp })
+        .where('escala.matSgp = :matSgp', { matSgp })
         .andWhere('escala.dataInicio = :dataInicio', {
           dataInicio: dto.dataInicio,
         })
         .andWhere('escala.id != :id', { id }) // evitar pegar a própria
         .getOne();
-
+  
       if (existeoutra) {
         const omeDaEscala = await manager.findOne(OmeEntity, {
           where: { id: existeoutra.omeId },
         });
-
+  
         throw new BadRequestException(
-          `Já existe uma escala para o militar ${dto.matSgp} na data ${
-            dto.dataInicio
-          } na OME: ${omeDaEscala?.nomeOme || 'desconhecida'}.`,
+          `Já existe uma escala para o militar ${matSgp} na data ${dto.dataInicio} na OME: ${omeDaEscala?.nomeOme || 'desconhecida'}.`,
         );
       }
-
+  
       const horaInicio = dto.horaInicio ?? escalaAtual.horaInicio;
       const horaFinal = dto.horaFinal ?? escalaAtual.horaFinal;
       const novoTtCota = horaInicio === horaFinal ? 2 : 1;
-
+  
+      const tipoAtual = escalaAtual.tipoSgp?.toUpperCase();
       const tipoNovo = (dto.tipoSgp ?? escalaAtual.tipoSgp)?.toUpperCase();
       if (tipoNovo !== 'O' && tipoNovo !== 'P') {
         throw new BadRequestException(`tipoSgp inválido. Use 'O' ou 'P'.`);
       }
-
+  
       const operacaoId = dto.pjesOperacaoId ?? escalaAtual.pjesOperacaoId;
       const operacao = await manager.findOne(PjesOperacaoEntity, {
         where: { id: operacaoId },
       });
-
+  
       if (!operacao) throw new NotFoundException('Operação não encontrada');
-
-      const totalCotasTipo = await manager
+  
+      // Obter totais atuais de cotas
+      const totalCotasOf = await manager
         .getRepository(PjesEscalaEntity)
         .createQueryBuilder('escala')
         .where('escala.pjesOperacaoId = :operacaoId', { operacaoId })
-        .andWhere('UPPER(escala.tipoSgp) = :tipo', { tipo: tipoNovo })
+        .andWhere('UPPER(escala.tipoSgp) = :tipo', { tipo: 'O' })
         .select('SUM(escala.ttCota)', 'total')
         .getRawOne()
         .then((res) => Number(res.total) || 0);
-
-      const totalFuturo = totalCotasTipo - escalaAtual.ttCota + novoTtCota;
-
-      if (
-        (tipoNovo === 'O' && totalFuturo > operacao.ttCtOfOper) ||
-        (tipoNovo === 'P' && totalFuturo > operacao.ttCtPrcOper)
-      ) {
+  
+      const totalCotasPrc = await manager
+        .getRepository(PjesEscalaEntity)
+        .createQueryBuilder('escala')
+        .where('escala.pjesOperacaoId = :operacaoId', { operacaoId })
+        .andWhere('UPPER(escala.tipoSgp) = :tipo', { tipo: 'P' })
+        .select('SUM(escala.ttCota)', 'total')
+        .getRawOne()
+        .then((res) => Number(res.total) || 0);
+  
+      // Recalcular cotas com base na mudança de tipo
+      let totalFuturoOf = totalCotasOf;
+      let totalFuturoPrc = totalCotasPrc;
+  
+      if (tipoAtual === tipoNovo) {
+        // Mantém o mesmo tipo: substitui a cota antiga pela nova
+        if (tipoNovo === 'O') {
+          totalFuturoOf = totalCotasOf - escalaAtual.ttCota + novoTtCota;
+        } else {
+          totalFuturoPrc = totalCotasPrc - escalaAtual.ttCota + novoTtCota;
+        }
+      } else {
+        // Mudou de tipo: tira do atual e adiciona ao novo
+        if (tipoNovo === 'O') {
+          totalFuturoOf = totalCotasOf + novoTtCota;
+          totalFuturoPrc = totalCotasPrc - escalaAtual.ttCota;
+        } else {
+          totalFuturoPrc = totalCotasPrc + novoTtCota;
+          totalFuturoOf = totalCotasOf - escalaAtual.ttCota;
+        }
+      }
+  
+      // Validar limites
+      if (totalFuturoOf > operacao.ttCtOfOper) {
         throw new BadRequestException(
-          `Atualização inválida: cotas para ${
-            tipoNovo === 'O' ? 'oficiais' : 'praças'
-          } excederiam o limite (${totalFuturo} > ${
-            tipoNovo === 'O' ? operacao.ttCtOfOper : operacao.ttCtPrcOper
-          }).`,
+          `Atualização inválida: cotas para oficiais excederiam o limite (${totalFuturoOf} > ${operacao.ttCtOfOper}).`,
         );
       }
-
+      if (totalFuturoPrc > operacao.ttCtPrcOper) {
+        throw new BadRequestException(
+          `Atualização inválida: cotas para praças excederiam o limite (${totalFuturoPrc} > ${operacao.ttCtPrcOper}).`,
+        );
+      }
+  
+      // Verifica limite por matrícula
       await this.verificarLimiteCotasPorMatricula(
         matSgp,
         dataInicio,
@@ -563,20 +561,21 @@ export class PjesEscalaService {
         manager,
         id,
       );
-
+  
       delete dto.pjesOperacaoId;
-
+  
       await manager.update(PjesEscalaEntity, id, {
         ...dto,
         ttCota: novoTtCota,
       });
-
+  
       return manager.findOne(PjesEscalaEntity, {
         where: { id },
         relations: ['pjesoperacao', 'pjesevento'],
       });
     });
   }
+  
 
   async updateStatusEscala(
     id: number,
@@ -883,6 +882,28 @@ export class PjesEscalaService {
     if (user?.typeUser === 1) {
       query.andWhere('escala.omeId = :omeId', { omeId: user.omeId });
     }
+
+      
+    if (![5, 10].includes(user.typeUser)) {
+      const eventos = await this.pjesEventoRepository.find({
+        where: {
+          omeId: user.omeId,
+          mes,
+          ano,
+        },
+      });
+
+      const existemNaoHomologados = eventos.some(
+        (evento) => evento.statusEvento !== 'HOMOLOGADA',
+      );
+
+      if (existemNaoHomologados) {
+        throw new BadRequestException(
+          'Opa! Ainda há evento(s) não Homologados.',
+        );
+      }
+    }
+
 
     if (regularOuAtrasado) {
       query.andWhere(

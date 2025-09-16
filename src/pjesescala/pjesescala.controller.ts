@@ -93,23 +93,17 @@ export class PjesEscalaController {
   )
   @Get('quantidade')
   async getQuantidadePorMatriculaAnoMes(
-    @Query('matSgp') matSgp: number,
-    @Query('ano') ano: number,
-    @Query('mes') mes: number,
-  ): Promise<number> {
-    return this.service.getQuantidadePorMatriculaAnoMes(matSgp, ano, mes);
-  }
+  @Query('matSgp') matSgp: number,
+  @Query('ano') ano: number,
+  @Query('mes') mes: number,
+): Promise<number> {
+  // Usa o método otimizado passando uma lista com uma matrícula só
+  const resultados = await this.service.getQuantidadePorVariosMatriculas([matSgp], ano, mes);
+  const resultado = resultados.find((r) => r.matSgp === matSgp);
+  return resultado?.total ?? 0;
+}
 
-  @Roles(UserType.Master, UserType.Tecnico, UserType.Auxiliar)
-  @Post()
-  async create(
-    @Body() dto: CreatePjesEscalaDto,
-    @User() user: LoginPayload,
-  ): Promise<ReturnPjesEscalaDto> {
-    const created = await this.service.create(dto, user);
-    return new ReturnPjesEscalaDto(created);
-  }
-
+  
   @Roles(
     UserType.Master,
     UserType.Tecnico,
@@ -123,10 +117,19 @@ export class PjesEscalaController {
     @Query('operacaoId') operacaoId?: number,
     @Query('ano') ano?: number,
     @Query('mes') mes?: number,
+    @Query('page') page = 1,
+    @Query('limit') limit = 100,
   ): Promise<ReturnPjesEscalaDto[]> {
-    const escalas = await this.service.findAll(operacaoId, ano, mes);
+    const escalas = await this.service.findAll(
+      operacaoId,
+      ano,
+      mes,
+      Number(page),
+      Number(limit),
+    );
     return escalas.map((e) => new ReturnPjesEscalaDto(e));
-  }
+}
+
 
   @Roles(
     UserType.Master,
@@ -144,7 +147,17 @@ export class PjesEscalaController {
     return new ReturnPjesEscalaDto(escala);
   }
 
-  @Roles(UserType.Master)
+  @Roles(UserType.Master, UserType.Tecnico, UserType.Auxiliar)
+  @Post()
+  async create(
+    @Body() dto: CreatePjesEscalaDto,
+    @User() user: LoginPayload,
+  ): Promise<ReturnPjesEscalaDto> {
+    const created = await this.service.create(dto, user);
+    return new ReturnPjesEscalaDto(created);
+  }
+
+  @Roles(UserType.Master, UserType.Auxiliar,)
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,

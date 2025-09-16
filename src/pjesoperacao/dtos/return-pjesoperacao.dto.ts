@@ -18,10 +18,6 @@ export class ReturnPjesOperacaoDto {
   codOp: string;
   createdAt: Date;
   updatedAt: Date;
-  pjesevento?: {
-    id: number;
-    nomeEvento: string;
-  };
 
   pjesescalas?: ReturnPjesEscalaDto[];
 
@@ -43,35 +39,41 @@ export class ReturnPjesOperacaoDto {
     this.mes = pjesOperacaoEntity.mes;
     this.ano = pjesOperacaoEntity.ano;
     this.codOp = pjesOperacaoEntity.CodOp;
-
-    if (pjesOperacaoEntity.pjesevento) {
-      this.pjesevento = {
-        id: pjesOperacaoEntity.pjesevento.id,
-        nomeEvento: pjesOperacaoEntity.pjesevento.nomeEvento,
-      };
-    }
-
-    let consumoOf = 0;
-    let consumoPrc = 0;
-
+  
+    this.nomeOme = pjesOperacaoEntity.ome?.nomeOme;
+  
+    // Só mapeia as escalas se elas existirem
     if (pjesOperacaoEntity.pjesescalas) {
+      this.pjesescalas = pjesOperacaoEntity.pjesescalas.map(
+        (escala) => new ReturnPjesEscalaDto(escala),
+      );
+    }
+  
+    // FLEXÍVEL: Usa agregados, se vieram via query
+    if (
+      typeof (pjesOperacaoEntity as any).ttCtOfExeOper === 'number' &&
+      typeof (pjesOperacaoEntity as any).ttCtPrcExeOper === 'number'
+    ) {
+      this.ttCtOfExeOper = (pjesOperacaoEntity as any).ttCtOfExeOper;
+      this.ttCtPrcExeOper = (pjesOperacaoEntity as any).ttCtPrcExeOper;
+    } else if (pjesOperacaoEntity.pjesescalas) {
+      // Caso contrário, calcula manualmente
+      let consumoOf = 0;
+      let consumoPrc = 0;
+  
       for (const escala of pjesOperacaoEntity.pjesescalas) {
         const tipo = escala.tipoSgp.toUpperCase();
-        const isOf = ['O'].includes(tipo);
-        const isPrc = ['P'].includes(tipo);
-
-        if (isOf) consumoOf += escala.ttCota;
-        else if (isPrc) consumoPrc += escala.ttCota;
+        if (tipo === 'O') consumoOf += escala.ttCota;
+        else if (tipo === 'P') consumoPrc += escala.ttCota;
       }
+  
+      this.ttCtOfExeOper = consumoOf;
+      this.ttCtPrcExeOper = consumoPrc;
+    } else {
+      // Nenhum dado disponível
+      this.ttCtOfExeOper = 0;
+      this.ttCtPrcExeOper = 0;
     }
-
-    this.nomeOme = pjesOperacaoEntity.ome?.nomeOme;
-    //this.pjesescalas = pjesOperacaoEntity.pjesescalas;
-    this.pjesescalas = pjesOperacaoEntity.pjesescalas?.map(
-      (escala) => new ReturnPjesEscalaDto(escala),
-    );
-
-    this.ttCtOfExeOper = consumoOf;
-    this.ttCtPrcExeOper = consumoPrc;
   }
+  
 }

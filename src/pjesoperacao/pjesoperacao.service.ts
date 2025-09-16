@@ -8,11 +8,14 @@ import { BadRequestException } from '@nestjs/common';
 import { PjesEventoEntity } from 'src/pjesevento/entities/pjesevento.entity';
 import { LoginPayload } from 'src/auth/dtos/loginPayload.dto';
 import { UpdateStatusPjesOperacaoDto } from './dtos/update-status-pjesoperacao.dto';
+import { In } from 'typeorm';
 
 import { Response } from 'express';
 import PDFDocument from 'pdfkit';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ReturnPjesEscalaDto } from 'src/pjesescala/dtos/return-pjesescala.dto';
+import { PjesEscalaEntity } from 'src/pjesescala/entities/pjesescala.entity';
 type PDFDoc = InstanceType<typeof PDFDocument>;
 
 @Injectable()
@@ -103,62 +106,99 @@ export class PjesOperacaoService {
     return new ReturnPjesOperacaoDto(withRelations);
   }
 
-  async findAll(): Promise<ReturnPjesOperacaoDto[]> {
-    const operations = await this.pjesOperacaoRepository.find({
-      relations: [
-        'ome',
-        'pjesevento',
-        'pjesescalas',
-        'pjesescalas.comentarios',
-        'pjesescalas.comentarios.autor',
-        'pjesescalas.comentarios.autor.ome',
-      ],
-      order: { id: 'ASC' },
-    });
-
-    // Apenas mapear as operações para o DTO, sem modificar entidades internas
-    return operations.map((op) => new ReturnPjesOperacaoDto(op));
+  async findEscalasByOperacaoId(operacaoId: number): Promise<ReturnPjesEscalaDto[]> {
+    const escalas = await this.pjesOperacaoRepository.manager
+      .getRepository(PjesEscalaEntity)
+      .find({
+        where: { pjesOperacaoId: operacaoId },
+        relations: ['ome', 'pjesevento', 'pjesoperacao', 'statusLogs'],
+        order: { dataInicio: 'ASC' },
+      });
+  
+    return escalas.map((e) => new ReturnPjesEscalaDto(e));
   }
-
+  
+  async findAll(params: {
+    mes?: number;
+    ano?: number;
+    user?: LoginPayload;
+  }): Promise<ReturnPjesOperacaoDto[]> {
+    const { mes, ano, user } = params;
+  
+    const query = this.pjesOperacaoRepository
+      .createQueryBuilder('operacao')
+      .leftJoin('operacao.ome', 'ome')
+      .leftJoin('operacao.pjesescalas', 'escala')
+      .select([
+        'operacao',
+        'ome.nomeOme',
+      ])
+      .addSelect(`SUM(CASE WHEN escala.tipoSgp = 'O' THEN escala.ttCota ELSE 0 END)`, 'ttCtOfExeOper')
+      .addSelect(`SUM(CASE WHEN escala.tipoSgp = 'P' THEN escala.ttCota ELSE 0 END)`, 'ttCtPrcExeOper')
+      .groupBy('operacao.id')
+      .addGroupBy('ome.nomeOme')
+      .orderBy('operacao.id', 'ASC');
+  
+    if (mes) query.andWhere('operacao.mes = :mes', { mes });
+    if (ano) query.andWhere('operacao.ano = :ano', { ano });
+  
+    // Filtra por OME se for usuário comum
+    if (user?.typeUser === 1 && user?.omeId) {
+      query.andWhere('operacao.omeId = :omeId', { omeId: user.omeId });
+    }
+  
+    const rawResult = await query.getRawMany();
+  
+    // Agora precisamos buscar as entidades completas e montar o DTO manualmente
+    const operacoes = await this.pjesOperacaoRepository.find({
+      relations: ['ome'],
+      where: {
+        id: In(rawResult.map((r) => r.operacao_id)),
+      },
+    });
+  
+    return operacoes.map((op) => {
+      const rawData = rawResult.find((r) => r.operacao_id === op.id);
+      const dto = new ReturnPjesOperacaoDto(op);
+  
+      dto.ttCtOfExeOper = parseInt(rawData?.ttCtOfExeOper) || 0;
+      dto.ttCtPrcExeOper = parseInt(rawData?.ttCtPrcExeOper) || 0;
+  
+      return dto;
+    });
+  }
+  
   async findOne(id: number): Promise<ReturnPjesOperacaoDto> {
     const operation = await this.pjesOperacaoRepository.findOne({
       where: { id },
       relations: [
         'pjesevento',
         'pjesescalas',
-        'pjesescalas.comentarios',
-        'pjesescalas.comentarios.autor',
-        'pjesescalas.comentarios.autor.ome',
+        'pjesescalas.statusLogs', // Apenas logs de status
       ],
     });
-
+  
     if (!operation) throw new NotFoundException('Operação não encontrada');
-
-    // Retornar diretamente o DTO, que deve cuidar de converter comentários
+  
     return new ReturnPjesOperacaoDto(operation);
   }
-
+  
   async findByCodOp(CodOp: string): Promise<ReturnPjesOperacaoDto> {
     const operacao = await this.pjesOperacaoRepository.findOne({
       where: { CodOp },
       relations: [
         'pjesescalas',
-        'pjesescalas.comentarios',
-        'pjesescalas.comentarios.autor',
-        'pjesescalas.comentarios.autor.ome',
+        'pjesescalas.statusLogs',
         'pjesevento',
         'ome',
-        'pjesescalas.statusLogs',
       ],
     });
   
     if (!operacao) {
-      throw new NotFoundException(
-        `Operação com código ${CodOp} não encontrada`,
-      );
+      throw new NotFoundException(`Operação com código ${CodOp} não encontrada`);
     }
   
-    // Ordenar manualmente pjesescalas
+    // Ordenar as escalas em memória se necessário (por hora)
     operacao.pjesescalas = operacao.pjesescalas.sort((a, b) => {
       const dataA = new Date(`${a.dataInicio}T${a.horaInicio}`);
       const dataB = new Date(`${b.dataInicio}T${b.horaInicio}`);
@@ -166,7 +206,6 @@ export class PjesOperacaoService {
       const compareDate = dataA.getTime() - dataB.getTime();
       if (compareDate !== 0) return compareDate;
   
-      // Ordem personalizada de funcao: FISCAL → MOT → PAT
       const funcaoOrdem = { FISCAL: 1, MOT: 2, PAT: 3 };
       const funcaoA = funcaoOrdem[a.funcao] || 99;
       const funcaoB = funcaoOrdem[b.funcao] || 99;
@@ -176,7 +215,7 @@ export class PjesOperacaoService {
   
     return new ReturnPjesOperacaoDto(operacao);
   }
-    
+  
   async remove(id: number, user: LoginPayload): Promise<void> {
     const operation = await this.pjesOperacaoRepository.findOne({
       where: { id },

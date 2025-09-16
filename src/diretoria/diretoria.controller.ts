@@ -8,6 +8,7 @@ import {
   Put,
   Delete,
   ParseIntPipe,
+  Query
 } from '@nestjs/common';
 import { DiretoriaService } from './diretoria.service';
 import { ReturnDiretoriaDto } from './dtos/returnDiretoria.dto';
@@ -32,10 +33,13 @@ export class DiretoriaController {
   @Get(':id')
   async findOne(
     @Param('id', ParseIntPipe) id: number,
-  ): Promise<ReturnDiretoriaDto> {
-    return this.diretoriaService.findOne(id);
+    @Query('mes') mes?: number,
+    @Query('ano') ano?: number,
+    @Query('codVerba') codVerba?: number,
+  ) {
+    return this.diretoriaService.findOne(id, mes, ano, codVerba);
   }
-
+  
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
