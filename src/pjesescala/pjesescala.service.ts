@@ -211,10 +211,7 @@ export class PjesEscalaService {
     operacaoId?: number,
     ano?: number,
     mes?: number,
-    page = 1,
-    limit = 100,
-    busca?: string,
-  ): Promise<{ data: PjesEscalaEntity[]; total: number }> {
+  ): Promise<PjesEscalaEntity[]> {
     const query = this.pjesEscalaRepository
       .createQueryBuilder('escala')
       .leftJoinAndSelect('escala.ome', 'ome')
@@ -235,18 +232,7 @@ export class PjesEscalaService {
       query.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
     }
   
-    if (busca) {
-      const buscaFormatada = `%${busca}%`.toLowerCase();
-  
-      query.andWhere(`
-        LOWER(escala.pgSgp) ILIKE :busca OR
-        LOWER(escala.matSgp) ILIKE :busca OR
-        LOWER(escala.nomeGuerraSgp) ILIKE :busca OR
-        LOWER(escala.funcao) ILIKE :busca OR
-        LOWER(escala.situacaoSgp) ILIKE :busca
-      `, { busca: buscaFormatada });
-    }
-  
+    // Adiciona coluna virtual para ordenar funções com prioridade: FISCAL > MOT > PAT
     query
       .addSelect(`
         CASE 
@@ -258,16 +244,10 @@ export class PjesEscalaService {
       `, 'ordem_funcao')
       .orderBy('escala.dataInicio', 'DESC')
       .addOrderBy('escala.horaInicio', 'DESC')
-      .addOrderBy('ordem_funcao', 'ASC')
-      .skip((page - 1) * limit)
-      .take(limit);
+      .addOrderBy('ordem_funcao', 'ASC');
   
-    const [data, total] = await query.getManyAndCount();
-  
-    return { data, total };
+    return await query.getMany();
   }
-  
-  
     
   async findOne(id: number): Promise<PjesEscalaEntity> {
     const escala = await this.pjesEscalaRepository.findOne({

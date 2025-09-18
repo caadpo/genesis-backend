@@ -117,25 +117,14 @@ export class PjesEscalaController {
     @Query('operacaoId') operacaoId?: number,
     @Query('ano') ano?: number,
     @Query('mes') mes?: number,
-    @Query('page') page = 1,
-    @Query('limit') limit = 100,
-    @Query('busca') busca?: string,
-  ): Promise<{ escalas: ReturnPjesEscalaDto[]; total: number }> {
-    const { data, total } = await this.service.findAll(
+  ): Promise<ReturnPjesEscalaDto[]> {
+    const escalas = await this.service.findAll(
       operacaoId,
       ano,
       mes,
-      Number(page),
-      Number(limit),
-      busca
     );
-    return {
-      escalas: data.map((e) => new ReturnPjesEscalaDto(e)),
-      total,
-    };
-  }
-  
-
+    return escalas.map((e) => new ReturnPjesEscalaDto(e));
+}
 
 
   @Roles(
