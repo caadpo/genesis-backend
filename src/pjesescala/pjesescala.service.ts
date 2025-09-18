@@ -213,7 +213,8 @@ export class PjesEscalaService {
     mes?: number,
     page = 1,
     limit = 100,
-  ): Promise<PjesEscalaEntity[]> {
+    busca?: string,
+  ): Promise<{ data: PjesEscalaEntity[]; total: number }> {
     const query = this.pjesEscalaRepository
       .createQueryBuilder('escala')
       .leftJoinAndSelect('escala.ome', 'ome')
@@ -234,7 +235,18 @@ export class PjesEscalaService {
       query.andWhere('EXTRACT(MONTH FROM escala.dataInicio) = :mes', { mes });
     }
   
-    // Adiciona coluna virtual para ordenar funções com prioridade: FISCAL > MOT > PAT
+    if (busca) {
+      const buscaFormatada = `%${busca}%`.toLowerCase();
+  
+      query.andWhere(`
+        LOWER(escala.pgSgp) ILIKE :busca OR
+        LOWER(escala.matSgp) ILIKE :busca OR
+        LOWER(escala.nomeGuerraSgp) ILIKE :busca OR
+        LOWER(escala.funcao) ILIKE :busca OR
+        LOWER(escala.situacaoSgp) ILIKE :busca
+      `, { busca: buscaFormatada });
+    }
+  
     query
       .addSelect(`
         CASE 
@@ -250,8 +262,12 @@ export class PjesEscalaService {
       .skip((page - 1) * limit)
       .take(limit);
   
-    return await query.getMany();
+    const [data, total] = await query.getManyAndCount();
+  
+    return { data, total };
   }
+  
+  
     
   async findOne(id: number): Promise<PjesEscalaEntity> {
     const escala = await this.pjesEscalaRepository.findOne({
