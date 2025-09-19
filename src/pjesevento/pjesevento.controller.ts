@@ -82,7 +82,7 @@ export class PjesEventoController {
 }
 
 
-  @Roles(UserType.Master, UserType.Tecnico)
+  @Roles(UserType.Master, UserType.Tecnico, UserType.Diretor)
   @Put(':id')
   async update(
     @Param('id') id: number,
