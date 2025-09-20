@@ -58,6 +58,7 @@ export class PjesTetoController {
     UserType.Superintendente,
     UserType.Diretor,
     UserType.Auxiliar,
+    UserType.Comum,
   )
   @Get(':id')
 async findOne(

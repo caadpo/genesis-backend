@@ -198,7 +198,6 @@ export class PjesOperacaoService {
       throw new NotFoundException(`Operação com código ${CodOp} não encontrada`);
     }
   
-    // Ordenar as escalas em memória se necessário (por hora)
     operacao.pjesescalas = operacao.pjesescalas.sort((a, b) => {
       const dataA = new Date(`${a.dataInicio}T${a.horaInicio}`);
       const dataB = new Date(`${b.dataInicio}T${b.horaInicio}`);

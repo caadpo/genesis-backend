@@ -122,7 +122,7 @@ export class PjesEscalaService {
     matSgp: number,
     ano?: number,
     mes?: number,
-  ): Promise<MinhasEscalasDto[]> {
+  ): Promise<any> {
     const queryBuilder = this.pjesEscalaRepository
       .createQueryBuilder('escala')
       .leftJoin('escala.ome', 'ome')
@@ -141,6 +141,8 @@ export class PjesEscalaService {
         'teto.created_at_status_pg AS teto_created_at_status_pg',
         'pjesoperacao.nomeOperacao AS pjesoperacao_nomeOperacao',
         'pjesoperacao.codOp AS pjesoperacao_codOp',
+        'ome.nomeOme AS ome_nomeome',
+        'escala.tipoSgp AS escala_tipoSgp', // importante!
       ])
       .where('escala.matSgp = :matSgp', { matSgp });
   
@@ -154,16 +156,29 @@ export class PjesEscalaService {
   
     queryBuilder.orderBy('escala.dataInicio', 'ASC');
   
-    // Usar getRawMany para pegar tudo como raw, pois temos colunas de tabela 'teto' no select
     const rawResults = await queryBuilder.getRawMany();
   
-    return rawResults.map((row) => {
+    let totalCotas = 0;
+    let valorTotal = 0;
+  
+    const escalas = rawResults.map((row) => {
       const dataInicio = row['escala_datainicio'];
-    
+      const ttCota = Number(row['escala_ttcota']) || 0;
+      const tipoSgp = row['escala_tiposgp'];
+  
+      // Acumular totais
+      totalCotas += ttCota;
+  
+      if (tipoSgp === 'P') {
+        valorTotal += ttCota * 200;
+      } else if (tipoSgp === 'O') {
+        valorTotal += ttCota * 300;
+      }
+  
       return {
         dia: dataInicio ? new Date(dataInicio).toISOString().split('T')[0] : null,
         nomeOperacao: row['pjesoperacao_nomeoperacao'] ?? '',
-        nomeOme: row['ome_nomeOme'] ?? row['escala_omesgp'],
+        nomeOme: row['ome_nomeome'],
         localApresentacaoSgp: row['escala_localapresentacaosgp'],
         situacaoSgp: row['escala_situacaosgp'],
         horaInicio: row['escala_horainicio'],
@@ -171,7 +186,7 @@ export class PjesEscalaService {
         funcao: row['escala_funcao'],
         anotacaoEscala: row['escala_anotacaoescala'],
         statusEscala: row['escala_statusescala'],
-        ttCota: row['escala_ttcota'],
+        ttCota: ttCota,
         codOp: row['pjesoperacao_codop'],
         tetoStatusTeto: row['teto_status_teto'],
         tetoCreatedAtStatusTeto: row['teto_created_at_status_teto'],
@@ -179,8 +194,27 @@ export class PjesEscalaService {
         tetoCreatedAtStatusPg: row['teto_created_at_status_pg'],
       };
     });
-    
+  
+    // Construir o mês como YYYY-MM
+    let mesReferencia: string | null = null;
+    if (ano && mes) {
+      const mesFormatado = mes.toString().padStart(2, '0');
+      mesReferencia = `${ano}-${mesFormatado}`;
+    } else if (escalas.length > 0) {
+      // tenta inferir do primeiro item
+      mesReferencia = escalas[0].dia?.slice(0, 7) || null;
+    }
+  
+    return {
+      escalas,
+      resumo: {
+        mes: mesReferencia,
+        totalCotas,
+        valorTotal,
+      },
+    };
   }
+  
   
   async getQuantidadePorVariosMatriculas(
     matSgps: number[],
